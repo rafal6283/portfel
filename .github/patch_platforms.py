@@ -21,7 +21,7 @@ if 'signingConfigs.getByName("debug")' not in s or 'buildTypes {' not in s:
 s = s.replace('    buildTypes {', '''    // Stały klucz w (prywatnym) repo – każda nowa wersja instaluje się jako aktualizacja.
     signingConfigs {
         create("portfel") {
-            storeFile = file("portfel.jks")
+            storeFile = file("../../.github/portfel.jks")
             storePassword = "portfel123"
             keyAlias = "portfel"
             keyPassword = "portfel123"
