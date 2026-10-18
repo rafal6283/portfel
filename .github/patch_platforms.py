@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Uruchamiany raz po `flutter create`: nazwa, uprawnienia, stały klucz podpisu, Face ID."""
-import glob, re, shutil, sys
+import glob, re, sys
 
 def edit(path, pairs):
     s = open(path, encoding='utf-8').read()
@@ -32,7 +32,7 @@ s = s.replace('    buildTypes {', '''    // Stały klucz w (prywatnym) repo – 
 s = s.replace('signingConfigs.getByName("debug")', 'signingConfigs.getByName("portfel")')
 open(g, 'w', encoding='utf-8').write(s)
 print('patched', g)
-shutil.copy('.github/portfel.jks', 'android/app/portfel.jks')
+# klucz zostaje w .github/ (android/.gitignore pomija *.jks)
 
 m = 'android/app/src/main/AndroidManifest.xml'
 s = open(m, encoding='utf-8').read()

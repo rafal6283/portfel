@@ -33,7 +33,7 @@ Asset assetOf(String code) =>
 bool isMetal(String code) => code == 'XAU' || code == 'XAG';
 
 double? _d(dynamic v) => v == null ? null : (v is num ? v.toDouble() : double.tryParse(v.toString()));
-String? _s(dynamic v) => v == null ? null : v.toString();
+String? _s(dynamic v) => v?.toString();
 
 Map<String, dynamic> _extra(Map<String, dynamic> j, Set<String> known) =>
     {for (final e in j.entries) if (!known.contains(e.key)) e.key: e.value};

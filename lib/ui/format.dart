@@ -15,7 +15,7 @@ String n2(double v) => _n2.format(v);
 String qtyFmt(double v) => _q.format(v);
 String pct(double fraction, {bool signed = true}) {
   final s = _pct.format(fraction * 100);
-  return (signed && fraction > 0.0005 ? '+' : '') + s + '%';
+  return '${signed && fraction > 0.0005 ? '+' : ''}$s%';
 }
 
 String rateFmt(String code, double? v) {
