@@ -114,11 +114,18 @@ class _UnlockScreenState extends State<UnlockScreen> {
               ),
               const SizedBox(height: 8),
               if (lock.mode == LockMode.pin)
-                PinPad(autoLength: lock.codeLength, enabled: !locked, onSubmit: _try)
+                PinPad(
+                  length: lock.codeLength >= 4 ? lock.codeLength : 4,
+                  enabled: !locked,
+                  onSubmit: _try,
+                  leftKey: lock.bioAllowed
+                      ? IconButton(onPressed: _bio, icon: const Icon(Icons.fingerprint, size: 30), tooltip: 'Odcisk palca / twarz')
+                      : null,
+                )
               else if (lock.mode == LockMode.pattern)
                 PatternPad(enabled: !locked, minPoints: 1, onSubmit: (p) => _try(p.join('-'))),
               const SizedBox(height: 16),
-              if (lock.bioAllowed)
+              if (lock.bioAllowed && lock.mode != LockMode.pin)
                 FilledButton.tonalIcon(onPressed: _bio, icon: const Icon(Icons.fingerprint), label: const Text('Odcisk palca / twarz')),
               if (lock.usesSecret)
                 TextButton(onPressed: _forgot, child: Text(lock.mode == LockMode.pin ? 'Nie pamiętasz PIN-u?' : 'Nie pamiętasz wzoru?')),
@@ -142,6 +149,7 @@ class _SetSecretScreenState extends State<SetSecretScreen> {
   String? first;
   String error = '';
   Key padKey = UniqueKey();
+  int len = 4;
 
   bool get pin => widget.mode == LockMode.pin;
 
@@ -162,7 +170,16 @@ class _SetSecretScreenState extends State<SetSecretScreen> {
       });
       return;
     }
-    await LockService.I.setSecret(widget.mode, v, length);
+    try {
+      await LockService.I.setSecret(widget.mode, v, length);
+    } catch (e) {
+      setState(() {
+        first = null;
+        error = 'Nie udało się zapisać: $e';
+        padKey = UniqueKey();
+      });
+      return;
+    }
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -170,7 +187,7 @@ class _SetSecretScreenState extends State<SetSecretScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final step = first == null
-        ? (pin ? 'Wpisz nowy PIN (4–8 cyfr)' : 'Narysuj nowy wzór (co najmniej 4 punkty)')
+        ? (pin ? 'Wpisz nowy PIN' : 'Narysuj nowy wzór (co najmniej 4 punkty)')
         : (pin ? 'Wpisz PIN jeszcze raz' : 'Narysuj wzór jeszcze raz');
     return Scaffold(
       appBar: AppBar(title: Text(pin ? 'Ustaw PIN' : 'Ustaw wzór')),
@@ -181,9 +198,22 @@ class _SetSecretScreenState extends State<SetSecretScreen> {
             Text(step, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
             const SizedBox(height: 6),
             SizedBox(height: 22, child: Text(error, style: TextStyle(color: cs.error))),
+            const SizedBox(height: 8),
+            if (pin && first == null)
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 4, label: Text('4 cyfry')),
+                  ButtonSegment(value: 6, label: Text('6 cyfr')),
+                ],
+                selected: {len},
+                onSelectionChanged: (v) => setState(() {
+                  len = v.first;
+                  padKey = UniqueKey();
+                }),
+              ),
             const SizedBox(height: 16),
             if (pin)
-              PinPad(key: padKey, autoLength: first?.length, onSubmit: (v) => _entered(v, v.length))
+              PinPad(key: padKey, length: len, onSubmit: (v) => _entered(v, v.length))
             else
               PatternPad(key: padKey, onSubmit: (p) => _entered(p.join('-'), p.length)),
           ]),

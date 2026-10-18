@@ -34,15 +34,15 @@ void main() {
     ));
     await t.tap(find.text('start'));
     await t.pumpAndSettle();
-    expect(find.text('Wpisz nowy PIN (4–8 cyfr)'), findsOneWidget);
+    expect(find.text('Wpisz nowy PIN'), findsOneWidget);
 
-    await tapDigits(t, '2580');
-    await t.tap(find.byIcon(Icons.check));
+    await tapDigits(t, '2580'); // bez zatwierdzania
+    await t.pump(const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(find.text('Wpisz PIN jeszcze raz'), findsOneWidget);
 
     await tapDigits(t, '2580');
-    await t.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await t.pump(const Duration(milliseconds: 300));
     await t.pumpAndSettle();
 
     expect(LockService.I.mode, LockMode.pin);
@@ -56,7 +56,7 @@ void main() {
     await t.pumpWidget(MaterialApp(home: UnlockScreen(onUnlocked: () => unlocked = true)));
     await t.pump();
     await tapDigits(t, '1357');
-    await t.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await t.pump(const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(unlocked, isTrue);
   });

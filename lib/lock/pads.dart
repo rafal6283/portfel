@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class PinPad extends StatefulWidget {
-  /// Gdy podane – PIN zatwierdza się sam po wpisaniu tylu cyfr.
-  final int? autoLength;
-  final int minLength;
-  final int maxLength;
+  /// PIN zatwierdza się sam po wpisaniu [length] cyfr – bez przycisku „OK”.
+  final int length;
   final bool enabled;
   final Future<void> Function(String pin) onSubmit;
-  const PinPad({super.key, this.autoLength, this.minLength = 4, this.maxLength = 8, this.enabled = true, required this.onSubmit});
+  /// Opcjonalny przycisk w lewym dolnym rogu (np. odcisk palca).
+  final Widget? leftKey;
+  const PinPad({super.key, required this.length, this.enabled = true, required this.onSubmit, this.leftKey});
 
   @override
   State<PinPad> createState() => PinPadState();
@@ -23,22 +23,27 @@ class PinPadState extends State<PinPad> {
 
   Future<void> _submit() async {
     if (busy) return;
-    setState(() => busy = true);
+    busy = true;
     final v = pin;
-    await widget.onSubmit(v);
-    if (mounted) {
-      setState(() {
-        busy = false;
-        pin = '';
-      });
+    // krótka chwila, żeby była widoczna ostatnia kropka
+    await Future.delayed(const Duration(milliseconds: 120));
+    try {
+      await widget.onSubmit(v);
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          pin = '';
+        });
+      }
     }
   }
 
   void _tap(String d) {
-    if (!widget.enabled || busy || pin.length >= widget.maxLength) return;
+    if (!widget.enabled || busy || pin.length >= widget.length) return;
     HapticFeedback.selectionClick();
     setState(() => pin += d);
-    if (widget.autoLength != null && pin.length == widget.autoLength) _submit();
+    if (pin.length == widget.length) _submit();
   }
 
   void _back() {
@@ -49,7 +54,6 @@ class PinPadState extends State<PinPad> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final shown = widget.autoLength ?? (pin.length < widget.minLength ? widget.minLength : pin.length);
     Widget key(String label, {VoidCallback? onTap, Widget? child}) => SizedBox(
           width: 76,
           height: 64,
@@ -61,7 +65,7 @@ class PinPadState extends State<PinPad> {
         );
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Row(mainAxisSize: MainAxisSize.min, children: [
-        for (var i = 0; i < shown; i++)
+        for (var i = 0; i < widget.length; i++)
           Container(
             width: 14,
             height: 14,
@@ -81,9 +85,7 @@ class PinPadState extends State<PinPad> {
       ])
         Row(mainAxisSize: MainAxisSize.min, children: [for (final d in row) key(d, onTap: () => _tap(d))]),
       Row(mainAxisSize: MainAxisSize.min, children: [
-        widget.autoLength == null
-            ? key('', onTap: pin.length >= widget.minLength ? _submit : null, child: const Icon(Icons.check, size: 28))
-            : const SizedBox(width: 76, height: 64),
+        SizedBox(width: 76, height: 64, child: widget.leftKey),
         key('0', onTap: () => _tap('0')),
         key('', onTap: _back, child: const Icon(Icons.backspace_outlined)),
       ]),
