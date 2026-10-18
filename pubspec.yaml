@@ -1,0 +1,36 @@
+name: portfel
+description: Portfel – zyski i straty z walut, złota, srebra i lokat, z kursami NBP.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  http: ^1.2.2
+  path_provider: ^2.1.5
+  file_picker: ^10.1.0
+  local_auth: ^2.3.0
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter:
+  uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon.png
+  remove_alpha_ios: true
+  adaptive_icon_background: "#14201C"
+  adaptive_icon_foreground: assets/icon_fg.png

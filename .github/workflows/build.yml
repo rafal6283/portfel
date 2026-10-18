@@ -1,0 +1,148 @@
+name: Zbuduj aplikację
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    # Jednorazowo generuje foldery android/ i ios/ (flutter create), poprawia je i zapisuje w repo.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Czy brakuje platform?
+        id: check
+        run: |
+          if [ -d android/app/src ] && [ -d ios/Runner ]; then echo "need=false" >> $GITHUB_OUTPUT; else echo "need=true" >> $GITHUB_OUTPUT; fi
+      - uses: subosito/flutter-action@v2
+        if: steps.check.outputs.need == 'true'
+        with:
+          channel: stable
+          cache: true
+      - name: flutter create + poprawki
+        if: steps.check.outputs.need == 'true'
+        run: |
+          set -o pipefail
+          flutter --version
+          flutter create --org pl.portfel --project-name portfel --platforms android,ios . 2>&1 | tee bootstrap.log
+          rm -f test/widget_test.dart
+          python3 .github/patch_platforms.py 2>&1 | tee -a bootstrap.log
+          flutter pub get 2>&1 | tee -a bootstrap.log
+          dart run flutter_launcher_icons 2>&1 | tee -a bootstrap.log
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Wygenerowane platformy Android i iOS (flutter create)"
+          git push
+      - name: Logi (gałąź ci-bootstrap)
+        if: always() && steps.check.outputs.need == 'true'
+        run: bash .github/push_logs.sh ci-bootstrap bootstrap.log
+        env:
+          TOKEN: ${{ github.token }}
+
+  android:
+    needs: bootstrap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Zależności
+        run: |
+          flutter --version | head -1 | sed 's/^/::notice::/'
+          set -o pipefail
+          flutter pub get 2>&1 | tee pub.log
+      - name: Analiza kodu
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee analyze.log
+      - name: Testy obliczeń
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee test.log
+      - name: Build APK
+        run: |
+          set -o pipefail
+          flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }} 2>&1 | tee build.log
+          cp build/app/outputs/flutter-apk/app-release.apk portfel.apk
+      - name: Zgłoś błędy
+        if: failure()
+        run: bash .github/report.sh pub.log analyze.log test.log build.log
+      - name: Logi (gałąź ci-android)
+        if: always()
+        run: bash .github/push_logs.sh ci-android pub.log analyze.log test.log build.log
+        env:
+          TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: portfel.apk
+
+  ios:
+    needs: bootstrap
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build iOS (bez podpisu)
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter build ios --release --no-codesign --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }} 2>&1 | tee build.log
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr portfel.ipa Payload
+      - name: Zgłoś błędy
+        if: failure()
+        run: |
+          grep -E "error:|\*\* BUILD FAILED|Error:" build.log | head -60 > ios_err.log || true
+          bash .github/report.sh ios_err.log
+      - name: Logi (gałąź ci-ios)
+        if: always()
+        run: |
+          grep -E "error:|warning: .*Runner|BUILD|Error" build.log | head -200 > ios_err.log || true
+          tail -150 build.log > ios_tail.log || true
+          bash .github/push_logs.sh ci-ios ios_err.log ios_tail.log
+        env:
+          TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: portfel.ipa
+
+  release:
+    needs: [android, ios]
+    if: always() && needs.android.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Opublikuj w Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Portfel 1.0.${{ github.run_number }}
+          body: |
+            **Android:** pobierz `portfel.apk` na telefonie i zainstaluj (kolejne wersje instalują się jako aktualizacja, dane zostają).
+            **iPhone:** pobierz `portfel.ipa` na komputer i zainstaluj przez Sideloadly lub AltStore swoim Apple ID (odnawianie co 7 dni).
+          files: out/**/*
+          fail_on_unmatched_files: false
+          make_latest: true
