@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:local_auth/local_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'lock/lock_screens.dart';
+import 'lock/lock_service.dart';
 import 'store.dart';
 import 'ui/format.dart';
 import 'ui/home.dart';
@@ -41,44 +41,27 @@ class PortfelApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const LockGate(child: HomeScreen()),
+      builder: (context, child) => LockGate(child: child ?? const SizedBox()),
+      home: const HomeScreen(),
     );
   }
 }
 
-/// Opcjonalna blokada odciskiem palca / twarzą / kodem telefonu.
+/// Blokada aplikacji: PIN, wzór albo odcisk palca / twarz (Ustawienia → Blokada).
 class LockGate extends StatefulWidget {
   final Widget child;
   const LockGate({super.key, required this.child});
-
-  static Future<bool> isEnabled() async {
-    try {
-      return (await SharedPreferences.getInstance()).getBool('lock') ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static Future<void> setEnabled(bool v) async => (await SharedPreferences.getInstance()).setBool('lock', v);
-
-  static Future<bool> authenticate() async {
-    final auth = LocalAuthentication();
-    try {
-      if (!await auth.isDeviceSupported()) return true;
-      return await auth.authenticate(localizedReason: 'Odblokuj Portfel');
-    } catch (_) {
-      return false;
-    }
-  }
 
   @override
   State<LockGate> createState() => _LockGateState();
 }
 
 class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
+  final lock = LockService.I;
   bool _checked = false;
   bool _locked = false;
-  DateTime? _pausedAt;
+  bool _covered = false; // zasłona w podglądzie ostatnich aplikacji
+  DateTime? _leftAt;
 
   @override
   void initState() {
@@ -88,29 +71,38 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   }
 
   Future<void> _init() async {
-    await app.load();
-    final on = await LockGate.isEnabled();
+    await Future.wait([app.load(), lock.load()]);
     setState(() {
-      _locked = on;
+      _locked = lock.enabled;
       _checked = true;
     });
-    if (on) _unlock();
     app.refreshRates();
   }
 
-  Future<void> _unlock() async {
-    final ok = await LockGate.authenticate();
-    if (ok && mounted) setState(() => _locked = false);
-  }
-
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) async {
-    if (s == AppLifecycleState.paused) _pausedAt = DateTime.now();
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    // okno odcisku palca, wybór pliku itp. też wyrzucają aplikację w tło – wtedy nie blokuj
+    if (lock.external || _locked) {
+      if (s == AppLifecycleState.resumed) _leftAt = null;
+      return;
+    }
+    if (!lock.enabled) {
+      if (s == AppLifecycleState.resumed) app.refreshRates();
+      return;
+    }
+    if (s == AppLifecycleState.inactive || s == AppLifecycleState.hidden) {
+      if (!_covered) setState(() => _covered = true);
+    }
+    if (s == AppLifecycleState.paused || s == AppLifecycleState.hidden) {
+      _leftAt ??= DateTime.now();
+    }
     if (s == AppLifecycleState.resumed) {
-      if (_pausedAt != null && DateTime.now().difference(_pausedAt!) > const Duration(minutes: 2) && await LockGate.isEnabled()) {
-        setState(() => _locked = true);
-        _unlock();
-      }
+      final away = _leftAt == null ? Duration.zero : DateTime.now().difference(_leftAt!);
+      _leftAt = null;
+      setState(() {
+        _covered = false;
+        if (!_locked && away.inSeconds >= lock.timeoutS && away > const Duration(seconds: 2)) _locked = true;
+      });
       app.refreshRates();
     }
   }
@@ -123,20 +115,17 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (!_checked) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_locked) {
-      return Scaffold(
-        body: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.lock_outline, size: 48),
-            const SizedBox(height: 16),
-            const Text('Portfel jest zablokowany'),
-            const SizedBox(height: 16),
-            FilledButton.icon(onPressed: _unlock, icon: const Icon(Icons.fingerprint), label: const Text('Odblokuj')),
-          ]),
+    return Stack(children: [
+      Offstage(offstage: !_checked || _locked, child: widget.child),
+      if (!_checked) const Positioned.fill(child: Scaffold(body: Center(child: CircularProgressIndicator()))),
+      if (_checked && _locked) Positioned.fill(child: UnlockScreen(onUnlocked: () => setState(() => _locked = false))),
+      if (_covered && !_locked)
+        Positioned.fill(
+          child: ColoredBox(
+            color: Palette.board,
+            child: const Center(child: Icon(Icons.lock_outline, color: Palette.boardDim, size: 48)),
+          ),
         ),
-      );
-    }
-    return widget.child;
+    ]);
   }
 }

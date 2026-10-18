@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../lock/lock_screens.dart';
+import '../lock/lock_service.dart';
 import '../main.dart';
 import 'format.dart';
 
@@ -13,13 +15,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool lock = false;
+  final lock = LockService.I;
+  bool canBio = false;
 
   @override
   void initState() {
     super.initState();
-    LockGate.isEnabled().then((v) {
-      if (mounted) setState(() => lock = v);
+    lock.canUseBiometrics().then((v) {
+      if (mounted) setState(() => canBio = v);
     });
   }
 
@@ -27,7 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final now = DateTime.now();
     final name = 'portfel-${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}.json';
     try {
-      final path = await FilePicker.platform.saveFile(dialogTitle: 'Zapisz kopię Portfela', fileName: name, bytes: app.exportBytes());
+      final path = await lock.whileExternal(
+          () => FilePicker.platform.saveFile(dialogTitle: 'Zapisz kopię Portfela', fileName: name, bytes: app.exportBytes()));
       if (path != null) toast(context, 'Zapisano kopię');
     } catch (e) {
       toast(context, 'Nie udało się zapisać kopii: $e');
@@ -35,7 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _import() async {
-    final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+    final res = await lock.whileExternal(() => FilePicker.platform.pickFiles(type: FileType.any, withData: true));
     if (res == null || res.files.isEmpty) return;
     final f = res.files.first;
     final bytes = f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
@@ -53,13 +57,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _toggleLock(bool v) async {
-    if (v && !await LockGate.authenticate()) {
+  Future<void> _chooseMode() async {
+    final picked = await showModalBottomSheet<LockMode>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final m in [LockMode.none, LockMode.pin, LockMode.pattern, if (canBio) LockMode.biometric])
+            ListTile(
+              leading: Icon(switch (m) {
+                LockMode.none => Icons.lock_open,
+                LockMode.pin => Icons.pin_outlined,
+                LockMode.pattern => Icons.pattern,
+                LockMode.biometric => Icons.fingerprint,
+              }),
+              title: Text(lockModeLabel(m)),
+              trailing: lock.mode == m ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(c, m),
+            ),
+        ]),
+      ),
+    );
+    if (picked == null) return;
+    switch (picked) {
+      case LockMode.none:
+        if (lock.enabled && !await confirm(context, 'Wyłączyć blokadę?', 'Każdy, kto weźmie telefon, zobaczy Twój portfel.', ok: 'Wyłącz')) return;
+        await lock.disable();
+        toast(context, 'Blokada wyłączona');
+      case LockMode.pin:
+      case LockMode.pattern:
+        final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => SetSecretScreen(mode: picked)));
+        if (ok == true) {
+          toast(context, picked == LockMode.pin ? 'PIN ustawiony' : 'Wzór ustawiony');
+          if (canBio && !lock.bio) {
+            final use = await confirm(context, 'Odcisk palca / twarz?', 'Odblokowywać też biometrią? PIN lub wzór zostaje jako zapasowy.', ok: 'Tak');
+            if (use && await lock.biometric(reason: 'Potwierdź, aby włączyć odblokowanie biometrią')) await lock.setBio(true);
+          }
+        }
+      case LockMode.biometric:
+        if (!await lock.biometric(reason: 'Potwierdź, aby włączyć blokadę')) {
+          toast(context, 'Nie udało się potwierdzić tożsamości');
+          return;
+        }
+        await lock.setBiometricOnly();
+        toast(context, 'Blokada włączona');
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleBio(bool v) async {
+    if (v && !await lock.biometric(reason: 'Potwierdź, aby włączyć odblokowanie biometrią')) {
       toast(context, 'Nie udało się potwierdzić tożsamości');
       return;
     }
-    await LockGate.setEnabled(v);
-    setState(() => lock = v);
+    await lock.setBio(v);
+    setState(() {});
+  }
+
+  Future<void> _chooseTimeout() async {
+    final v = await showDialog<int>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: const Text('Blokuj po wyjściu z aplikacji'),
+        children: [
+          for (final e in LockService.timeouts.entries)
+            ListTile(
+              title: Text(e.value),
+              trailing: lock.timeoutS == e.key ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(c, e.key),
+            ),
+        ],
+      ),
+    );
+    if (v != null) {
+      await lock.setTimeout(v);
+      setState(() {});
+    }
   }
 
   @override
@@ -82,13 +155,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: Text('${app.txs.length} transakcji, ${app.deposits.length} lokat'),
           onTap: _export,
         ),
-        SwitchListTile(
-          secondary: const Icon(Icons.fingerprint),
-          title: const Text('Blokada odciskiem / twarzą'),
-          subtitle: const Text('Pyta przy starcie i po 2 minutach w tle'),
-          value: lock,
-          onChanged: _toggleLock,
+        const _Header('Blokada'),
+        ListTile(
+          leading: Icon(lock.enabled ? Icons.lock_outline : Icons.lock_open),
+          title: const Text('Blokada aplikacji'),
+          subtitle: Text(lockModeLabel(lock.mode)),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _chooseMode,
         ),
+        if (lock.usesSecret && canBio)
+          SwitchListTile(
+            secondary: const Icon(Icons.fingerprint),
+            title: const Text('Odblokowanie odciskiem / twarzą'),
+            subtitle: Text(lock.mode == LockMode.pin ? 'PIN zostaje jako zapasowy' : 'Wzór zostaje jako zapasowy'),
+            value: lock.bio,
+            onChanged: _toggleBio,
+          ),
+        if (lock.enabled)
+          ListTile(
+            leading: const Icon(Icons.timer_outlined),
+            title: const Text('Blokuj po wyjściu z aplikacji'),
+            subtitle: Text(LockService.timeouts[lock.timeoutS] ?? '${lock.timeoutS} s'),
+            onTap: _chooseTimeout,
+          ),
+        if (lock.usesSecret)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'Po 5 błędnych próbach trzeba odczekać 30 s (potem coraz dłużej). '
+              'Zapomniany kod można zresetować blokadą ekranu telefonu.',
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5),
+            ),
+          ),
         const _Header('Kursy'),
         ListTile(
           leading: const Icon(Icons.currency_exchange),
