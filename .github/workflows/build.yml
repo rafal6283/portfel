@@ -91,7 +91,9 @@ jobs:
           path: portfel.apk
 
   ios:
+    # macOS zużywa 10× więcej minut – iPhone budowany tylko gdy w opisie commita jest [ios] albo przy ręcznym uruchomieniu
     needs: bootstrap
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ios]')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
