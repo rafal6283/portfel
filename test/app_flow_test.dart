@@ -12,6 +12,8 @@ void main() {
   testWidgets('po odblokowaniu PIN-em otwierają się ustawienia i formularz transakcji', (t) async {
     await Lock.setSecret(LockMethod.pin, '2468');
     await t.pumpWidget(const PortfelApp());
+    // wczytanie danych i ustawień idzie przez prawdziwe I/O – dajemy mu chwilę poza zegarem testu
+    await t.runAsync(() => Future.delayed(const Duration(seconds: 1)));
     await t.pumpAndSettle();
     expect(find.text('Wpisz PIN'), findsOneWidget);
 
@@ -19,6 +21,7 @@ void main() {
       await t.tap(find.text(d));
       await t.pump();
     }
+    await t.runAsync(() => Future.delayed(const Duration(milliseconds: 500)));
     await t.pumpAndSettle();
     expect(find.text('Wpisz PIN'), findsNothing);
 
