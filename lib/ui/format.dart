@@ -87,7 +87,7 @@ void toast(BuildContext context, String text) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating));
 }
 
-Future<bool> confirm(BuildContext context, String title, String body, {String ok = 'Usuń'}) async {
+Future<bool> confirm(BuildContext context, String title, String body, {String ok = 'Usuń', bool destructive = true}) async {
   final r = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
@@ -113,5 +113,16 @@ class Pill extends StatelessWidget {
         decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(5)),
         child: Text(text,
             style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+      );
+}
+
+class SectionTitle extends StatelessWidget {
+  final String text;
+  const SectionTitle(this.text, {super.key});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(text.toUpperCase(),
+            style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary)),
       );
 }

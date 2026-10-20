@@ -29,7 +29,7 @@ s = s.replace('    buildTypes {', '''    // Stały klucz w (prywatnym) repo – 
     }
 
     buildTypes {''', 1)
-s = s.replace('signingConfigs.getByName("debug")', 'signingConfigs.getByName("portfel")')
+s = s.replace('signingConfigs.getByName("debug")', 'signingConfigs.getByName("portfel")\n            isMinifyEnabled = false\n            isShrinkResources = false')
 open(g, 'w', encoding='utf-8').write(s)
 print('patched', g)
 # klucz zostaje w .github/ (android/.gitignore pomija *.jks)

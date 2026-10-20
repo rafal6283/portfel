@@ -258,3 +258,121 @@ String todayIso([DateTime? now]) {
   final d = now ?? DateTime.now();
   return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
+
+// ---------- gotówka ----------
+
+const List<String> cashCurrencies = ['PLN', 'USD', 'EUR', 'CHF', 'GBP', 'NOK', 'SEK', 'DKK', 'CZK', 'JPY', 'CAD', 'AUD'];
+
+class CashEntry {
+  String id;
+  String name; // np. „Sejf”, „Portfel”, „Konto oszczędnościowe”
+  String currency;
+  double amount;
+  String? updated; // data stanu
+  String note;
+  Map<String, dynamic> extra;
+
+  CashEntry({required this.id, this.name = '', this.currency = 'PLN', required this.amount, this.updated, this.note = '', Map<String, dynamic>? extra})
+      : extra = extra ?? {};
+
+  static const _known = {'id', 'name', 'currency', 'amount', 'updated', 'note'};
+
+  factory CashEntry.fromJson(Map<String, dynamic> j) => CashEntry(
+        id: _s(j['id']) ?? newId('c'),
+        name: _s(j['name']) ?? '',
+        currency: _s(j['currency']) ?? 'PLN',
+        amount: _d(j['amount']) ?? 0,
+        updated: _s(j['updated']),
+        note: _s(j['note']) ?? '',
+        extra: _extra(j, _known),
+      );
+
+  Map<String, dynamic> toJson() => {
+        ...extra,
+        'id': id,
+        'name': name,
+        'currency': currency,
+        'amount': amount,
+        if (updated != null) 'updated': updated,
+        'note': note,
+      };
+}
+
+// ---------- nieruchomości ----------
+
+class Property {
+  String id;
+  String name;
+  String location;
+  String? buyDate;
+  double buyPrice;
+  double buyCosts; // notariusz, PCC, prowizja, remont podnoszący wartość
+  double? value; // szacowana wartość dziś
+  String? valueDate;
+  bool sold;
+  String? sellDate;
+  double? sellPrice;
+  double? sellCosts;
+  double income; // dochód z najmu netto łącznie
+  String note;
+  Map<String, dynamic> extra;
+
+  Property({
+    required this.id,
+    this.name = '',
+    this.location = '',
+    this.buyDate,
+    required this.buyPrice,
+    this.buyCosts = 0,
+    this.value,
+    this.valueDate,
+    this.sold = false,
+    this.sellDate,
+    this.sellPrice,
+    this.sellCosts,
+    this.income = 0,
+    this.note = '',
+    Map<String, dynamic>? extra,
+  }) : extra = extra ?? {};
+
+  static const _known = {
+    'id', 'name', 'location', 'buyDate', 'buyPrice', 'buyCosts', 'value', 'valueDate',
+    'sold', 'sellDate', 'sellPrice', 'sellCosts', 'income', 'note'
+  };
+
+  factory Property.fromJson(Map<String, dynamic> j) => Property(
+        id: _s(j['id']) ?? newId('n'),
+        name: _s(j['name']) ?? '',
+        location: _s(j['location']) ?? '',
+        buyDate: _s(j['buyDate']),
+        buyPrice: _d(j['buyPrice']) ?? 0,
+        buyCosts: _d(j['buyCosts']) ?? 0,
+        value: _d(j['value']),
+        valueDate: _s(j['valueDate']),
+        sold: j['sold'] == true,
+        sellDate: _s(j['sellDate']),
+        sellPrice: _d(j['sellPrice']),
+        sellCosts: _d(j['sellCosts']),
+        income: _d(j['income']) ?? 0,
+        note: _s(j['note']) ?? '',
+        extra: _extra(j, _known),
+      );
+
+  Map<String, dynamic> toJson() => {
+        ...extra,
+        'id': id,
+        'name': name,
+        'location': location,
+        if (buyDate != null) 'buyDate': buyDate,
+        'buyPrice': buyPrice,
+        'buyCosts': buyCosts,
+        if (value != null) 'value': value,
+        if (valueDate != null) 'valueDate': valueDate,
+        if (sold) 'sold': true,
+        if (sellDate != null) 'sellDate': sellDate,
+        if (sellPrice != null) 'sellPrice': sellPrice,
+        if (sellCosts != null) 'sellCosts': sellCosts,
+        'income': income,
+        'note': note,
+      };
+}

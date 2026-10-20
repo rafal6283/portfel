@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../calc.dart';
 import '../main.dart';
 import '../models.dart';
+import 'assets_tab.dart';
 import 'deposit_form.dart';
 import 'format.dart';
 import 'settings.dart';
@@ -21,6 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _add() {
     if (tab == 1) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const DepositForm()));
+    } else if (tab == 2) {
+      addAssetSheet(context);
     } else {
       Navigator.push(context, MaterialPageRoute(builder: (_) => TxForm(initialAsset: filter)));
     }
@@ -52,15 +55,16 @@ class _HomeScreenState extends State<HomeScreen> {
           body: IndexedStack(index: tab, children: [
             PortfolioTab(onPick: (code) => setState(() {
                   filter = code;
-                  tab = 2;
+                  tab = 3;
                 })),
             const DepositsTab(),
+            const AssetsTab(),
             HistoryTab(filter: filter, onFilter: (f) => setState(() => filter = f)),
           ]),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: _add,
             icon: const Icon(Icons.add),
-            label: Text(tab == 1 ? 'Lokata' : 'Transakcja'),
+            label: Text(switch (tab) { 1 => 'Lokata', 2 => 'Dodaj', _ => 'Transakcja' }),
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: tab,
@@ -68,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
             destinations: const [
               NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Portfel'),
               NavigationDestination(icon: Icon(Icons.savings_outlined), selectedIcon: Icon(Icons.savings), label: 'Lokaty'),
+              NavigationDestination(icon: Icon(Icons.home_work_outlined), selectedIcon: Icon(Icons.home_work), label: 'Majątek'),
               NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Historia'),
             ],
           ),
@@ -87,6 +92,8 @@ class PortfolioTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = app.portfolio;
     final d = app.depositSummary;
+    final c = app.cashSummary;
+    final re = app.propertySummary;
     return RefreshIndicator(
       onRefresh: () => app.refreshRates(force: true),
       child: ListView(
@@ -104,7 +111,7 @@ class PortfolioTab extends StatelessWidget {
                 ),
               ),
             ),
-          _Summary(p: p, d: d),
+          _Summary(p: p, d: d, c: c, re: re),
           const SizedBox(height: 16),
           const _RateBoard(),
           const SizedBox(height: 20),
@@ -125,11 +132,13 @@ class PortfolioTab extends StatelessWidget {
 class _Summary extends StatelessWidget {
   final Portfolio p;
   final DepositTotals d;
-  const _Summary({required this.p, required this.d});
+  final CashTotals c;
+  final PropertyTotals re;
+  const _Summary({required this.p, required this.d, required this.c, required this.re});
 
   @override
   Widget build(BuildContext context) {
-    final total = p.unrealized + p.realized + d.net;
+    final total = p.unrealized + p.realized + d.net + re.net;
     final cs = Theme.of(context).colorScheme;
     Widget tile(String label, String value, {Color? color, String? sub}) => Container(
           padding: const EdgeInsets.all(12),
@@ -148,8 +157,13 @@ class _Summary extends StatelessWidget {
           ]),
         );
     return Column(children: [
-      tile('Wartość dziś', pln(p.value + d.value),
-          sub: 'waluty i kruszce ${pln(p.value)}${d.value > 0 ? ' · lokaty ${pln(d.value)}' : ''}'),
+      tile('Wartość dziś', pln(p.value + d.value + c.value + re.value),
+          sub: [
+            'waluty i kruszce ${pln(p.value)}',
+            if (d.value > 0) 'lokaty ${pln(d.value)}',
+            if (c.value > 0) 'gotówka ${pln(c.value)}',
+            if (re.value > 0) 'nieruchomości ${pln(re.value)}',
+          ].join(' · ')),
       const SizedBox(height: 8),
       Row(children: [
         Expanded(
@@ -162,7 +176,13 @@ class _Summary extends StatelessWidget {
       Row(children: [
         Expanded(child: tile('Lokaty', signedPln(d.net), color: Palette.pl(context, d.net), sub: 'odsetki netto')),
         const SizedBox(width: 8),
-        Expanded(child: tile('Wynik łącznie', signedPln(total), color: Palette.pl(context, total), sub: ' ')),
+        Expanded(
+            child: tile('Nieruchomości', signedPln(re.net),
+                color: Palette.pl(context, re.net), sub: re.owned + re.sold > 0 ? 'wartość i najem' : 'brak')),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: tile('Wynik łącznie', signedPln(total), color: Palette.pl(context, total), sub: 'waluty, kruszce, lokaty, nieruchomości')),
       ]),
     ]);
   }

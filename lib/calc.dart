@@ -190,3 +190,90 @@ DepositTotals depositTotals(List<Deposit> ds, {String? today}) {
   }
   return DepositTotals(net, value, po, o, c, u);
 }
+
+// ---------- gotówka i nieruchomości ----------
+
+/// Wartość gotówki w PLN (null, gdy brak kursu waluty).
+double? cashValue(CashEntry c, double? Function(String code) rateOf) {
+  if (c.currency == 'PLN') return c.amount;
+  final r = rateOf(c.currency);
+  return r == null ? null : c.amount * r;
+}
+
+class CashTotals {
+  final double value;
+  final bool missingRate;
+  final Map<String, double> byCurrency;
+  const CashTotals(this.value, this.missingRate, this.byCurrency);
+}
+
+CashTotals cashTotals(List<CashEntry> cs, double? Function(String code) rateOf) {
+  var v = 0.0;
+  var missing = false;
+  final by = <String, double>{};
+  for (final c in cs) {
+    by[c.currency] = (by[c.currency] ?? 0) + c.amount;
+    final x = cashValue(c, rateOf);
+    if (x == null) {
+      missing = true;
+    } else {
+      v += x;
+    }
+  }
+  return CashTotals(v, missing, by);
+}
+
+class PropertyCalc {
+  final double cost; // cena zakupu + koszty
+  final double value; // wartość dziś (0 po sprzedaży)
+  final double change; // zmiana wartości: niezrealizowana albo zrealizowana przy sprzedaży
+  final double net; // zmiana wartości + najem
+  final double? annual; // wynik r/r od kosztu
+  const PropertyCalc(this.cost, this.value, this.change, this.net, this.annual);
+}
+
+PropertyCalc propertyCalc(Property p, {String? today}) {
+  final cost = p.buyPrice + p.buyCosts;
+  final now = today ?? todayIso();
+  double value, change;
+  String? until;
+  if (p.sold) {
+    value = 0;
+    change = (p.sellPrice ?? 0) - (p.sellCosts ?? 0) - cost;
+    until = p.sellDate;
+  } else {
+    value = p.value ?? cost;
+    change = value - cost;
+    until = now;
+  }
+  final net = change + p.income;
+  double? annual;
+  if (p.buyDate != null && until != null && cost > 0) {
+    final n = daysBetween(p.buyDate!, until);
+    if (n >= 30) annual = net / cost * 365 / n;
+  }
+  return PropertyCalc(cost, value, change, net, annual);
+}
+
+class PropertyTotals {
+  final double value, net, cost;
+  final int owned, sold;
+  const PropertyTotals(this.value, this.net, this.cost, this.owned, this.sold);
+}
+
+PropertyTotals propertyTotals(List<Property> ps) {
+  var v = 0.0, n = 0.0, c = 0.0;
+  var o = 0, s = 0;
+  for (final p in ps) {
+    final r = propertyCalc(p);
+    v += r.value;
+    n += r.net;
+    if (p.sold) {
+      s++;
+    } else {
+      o++;
+      c += r.cost;
+    }
+  }
+  return PropertyTotals(v, n, c, o, s);
+}

@@ -41,9 +41,10 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("portfel")
+            // R8 usuwał klasy wtyczek (np. zapis ustawień blokady) – wyłączone, jak w Teczce Zdrowia
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

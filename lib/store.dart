@@ -12,6 +12,8 @@ import 'rates.dart';
 class AppState extends ChangeNotifier {
   List<Tx> txs = [];
   List<Deposit> deposits = [];
+  List<CashEntry> cash = [];
+  List<Property> properties = [];
   Map<String, ManualRate> manual = {};
   RatesSnapshot rates = fallbackRates;
   bool loaded = false;
@@ -46,6 +48,8 @@ class AppState extends ChangeNotifier {
         'exportedAt': DateTime.now().toUtc().toIso8601String(),
         'transactions': txs.map((t) => t.toJson()).toList(),
         'deposits': deposits.map((d) => d.toJson()).toList(),
+        'cash': cash.map((c) => c.toJson()).toList(),
+        'properties': properties.map((p) => p.toJson()).toList(),
         'manualRates': manual.map((k, v) => MapEntry(k, v.toJson())),
         'rates': rates.toJson(),
       };
@@ -62,7 +66,13 @@ class AppState extends ChangeNotifier {
     if (j is! Map) throw const FormatException('To nie jest plik kopii Portfela');
     final rawTx = j['transactions'] ?? j['tx'];
     final rawDep = j['deposits'];
-    if (rawTx is! List && rawDep is! List) throw const FormatException('W pliku nie ma transakcji ani lokat');
+    final rawCash = j['cash'];
+    final rawProp = j['properties'];
+    if (rawTx is! List && rawDep is! List && rawCash is! List && rawProp is! List) {
+      throw const FormatException('W pliku nie ma danych Portfela');
+    }
+    final newCash = <CashEntry>[for (final e in (rawCash is List ? rawCash : const [])) if (e is Map) CashEntry.fromJson(Map<String, dynamic>.from(e))];
+    final newProp = <Property>[for (final e in (rawProp is List ? rawProp : const [])) if (e is Map) Property.fromJson(Map<String, dynamic>.from(e))];
     final newTx = <Tx>[for (final e in (rawTx is List ? rawTx : const [])) if (e is Map) Tx.fromJson(Map<String, dynamic>.from(e))]
         .where((t) => t.qty > 0 && t.total >= 0 && t.date.length == 10)
         .toList();
@@ -83,8 +93,10 @@ class AppState extends ChangeNotifier {
     if (replace) {
       txs = newTx;
       deposits = newDep;
+      cash = newCash;
+      properties = newProp;
       manual = newManual;
-      added = newTx.length + newDep.length;
+      added = newTx.length + newDep.length + newCash.length + newProp.length;
     } else {
       final ti = {for (var i = 0; i < txs.length; i++) txs[i].id: i};
       for (final t in newTx) {
@@ -106,13 +118,31 @@ class AppState extends ChangeNotifier {
           added++;
         }
       }
+      added += _merge<CashEntry>(cash, newCash, (x) => x.id, () => updated++);
+      added += _merge<Property>(properties, newProp, (x) => x.id, () => updated++);
       manual.addAll(newManual);
     }
     if (snap != null && snap.rates.isNotEmpty) {
       final cur = rates.asOf ?? '';
       if (replace || (snap.asOf ?? '').compareTo(cur) > 0) rates = snap;
     }
-    return ImportSummary(added, updated, newTx.length, newDep.length);
+    return ImportSummary(added, updated, newTx.length, newDep.length, newCash.length, newProp.length);
+  }
+
+  /// Scala listę po id; zwraca liczbę dodanych.
+  int _merge<T>(List<T> into, List<T> items, String Function(T) id, void Function() onUpdate) {
+    var added = 0;
+    for (final x in items) {
+      final i = into.indexWhere((y) => id(y) == id(x));
+      if (i >= 0) {
+        into[i] = x;
+        onUpdate();
+      } else {
+        into.add(x);
+        added++;
+      }
+    }
+    return added;
   }
 
   Future<ImportSummary> importBytes(Uint8List bytes) async {
@@ -207,11 +237,48 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> upsertCash(CashEntry c) async {
+    final i = cash.indexWhere((x) => x.id == c.id);
+    if (i >= 0) {
+      cash[i] = c;
+    } else {
+      cash.add(c);
+    }
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> deleteCash(String id) async {
+    cash.removeWhere((x) => x.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> upsertProperty(Property p) async {
+    final i = properties.indexWhere((x) => x.id == p.id);
+    if (i >= 0) {
+      properties[i] = p;
+    } else {
+      properties.add(p);
+    }
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> deleteProperty(String id) async {
+    properties.removeWhere((x) => x.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  CashTotals get cashSummary => cashTotals(cash, rateOf);
+  PropertyTotals get propertySummary => propertyTotals(properties);
+
   Portfolio get portfolio => computePortfolio(txs, rateOf);
   DepositTotals get depositSummary => depositTotals(deposits);
 }
 
 class ImportSummary {
-  final int added, updated, txCount, depCount;
-  const ImportSummary(this.added, this.updated, this.txCount, this.depCount);
+  final int added, updated, txCount, depCount, cashCount, propCount;
+  const ImportSummary(this.added, this.updated, this.txCount, this.depCount, [this.cashCount = 0, this.propCount = 0]);
 }

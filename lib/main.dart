@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'lock/lock_screens.dart';
-import 'lock/lock_service.dart';
+import 'security/lock.dart';
 import 'store.dart';
 import 'ui/format.dart';
 import 'ui/home.dart';
+import 'ui/lock_screen.dart';
 
 final AppState app = AppState();
 
@@ -47,7 +47,8 @@ class PortfelApp extends StatelessWidget {
   }
 }
 
-/// Blokada aplikacji: PIN, wzór albo odcisk palca / twarz (Ustawienia → Blokada).
+/// Logowanie do aplikacji (PIN, wzór, blokada ekranu telefonu, biometria) – jak w Teczce Zdrowia.
+/// Umieszczone nad nawigatorem, więc zasłania też otwarte formularze i ustawienia.
 class LockGate extends StatefulWidget {
   final Widget child;
   const LockGate({super.key, required this.child});
@@ -57,54 +58,27 @@ class LockGate extends StatefulWidget {
 }
 
 class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
-  final lock = LockService.I;
-  bool _checked = false;
-  bool _locked = false;
-  bool _covered = false; // zasłona w podglądzie ostatnich aplikacji
-  DateTime? _leftAt;
+  LockConfig? config;
+  bool locked = true;
+  bool covered = false; // zasłona w podglądzie ostatnich aplikacji
+  DateTime? pausedAt;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _init();
+    _load();
   }
 
-  Future<void> _init() async {
-    await Future.wait([app.load(), lock.load()]);
+  Future<void> _load() async {
+    final results = await Future.wait([Lock.load(), app.load()]);
+    final c = results.first as LockConfig;
+    if (!mounted) return;
     setState(() {
-      _locked = lock.enabled;
-      _checked = true;
+      config = c;
+      locked = c.method != LockMethod.none;
     });
     app.refreshRates();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
-    // okno odcisku palca, wybór pliku itp. też wyrzucają aplikację w tło – wtedy nie blokuj
-    if (lock.external || _locked) {
-      if (s == AppLifecycleState.resumed) _leftAt = null;
-      return;
-    }
-    if (!lock.enabled) {
-      if (s == AppLifecycleState.resumed) app.refreshRates();
-      return;
-    }
-    if (s == AppLifecycleState.inactive || s == AppLifecycleState.hidden) {
-      if (!_covered) setState(() => _covered = true);
-    }
-    if (s == AppLifecycleState.paused || s == AppLifecycleState.hidden) {
-      _leftAt ??= DateTime.now();
-    }
-    if (s == AppLifecycleState.resumed) {
-      final away = _leftAt == null ? Duration.zero : DateTime.now().difference(_leftAt!);
-      _leftAt = null;
-      setState(() {
-        _covered = false;
-        if (!_locked && away.inSeconds >= lock.timeoutS && away > const Duration(seconds: 2)) _locked = true;
-      });
-      app.refreshRates();
-    }
   }
 
   @override
@@ -114,12 +88,45 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final on = (config?.method ?? LockMethod.none) != LockMethod.none;
+    if (on && (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) && !covered && !locked) {
+      setState(() => covered = true);
+    }
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) pausedAt ??= DateTime.now();
+    if (state == AppLifecycleState.resumed) {
+      if (covered) setState(() => covered = false);
+      app.refreshRates();
+      if (pausedAt == null) return;
+      final away = DateTime.now().difference(pausedAt!);
+      pausedAt = null;
+      Lock.load().then((c) {
+        if (!mounted) return;
+        // krótkie wyjścia (wybór pliku, logowanie biometrią) nie blokują
+        final limit = c.timeoutSec < 15 ? 15 : c.timeoutSec;
+        setState(() {
+          config = c;
+          if (c.method != LockMethod.none && away.inSeconds >= limit) locked = true;
+        });
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final c = config;
     return Stack(children: [
-      Offstage(offstage: !_checked || _locked, child: widget.child),
-      if (!_checked) const Positioned.fill(child: Scaffold(body: Center(child: CircularProgressIndicator()))),
-      if (_checked && _locked) Positioned.fill(child: UnlockScreen(onUnlocked: () => setState(() => _locked = false))),
-      if (_covered && !_locked)
+      Offstage(offstage: c == null || locked, child: widget.child),
+      if (c == null) const Positioned.fill(child: Scaffold(body: SizedBox())),
+      if (c != null && locked)
+        Positioned.fill(
+          child: Navigator(
+            onGenerateRoute: (_) => MaterialPageRoute(
+              builder: (_) => LockScreen(config: c, onUnlocked: () => setState(() => locked = false)),
+            ),
+          ),
+        ),
+      if (covered && !locked)
         Positioned.fill(
           child: ColoredBox(
             color: Palette.board,

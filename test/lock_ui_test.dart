@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portfel/lock/lock_screens.dart';
-import 'package:portfel/lock/lock_service.dart';
+import 'package:portfel/security/lock.dart';
+import 'package:portfel/ui/lock_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> tapDigits(WidgetTester t, String digits) async {
   for (final d in digits.split('')) {
-    await t.tap(find.widgetWithText(TextButton, d));
+    await t.tap(find.text(d));
     await t.pump();
   }
 }
@@ -14,8 +14,7 @@ Future<void> tapDigits(WidgetTester t, String digits) async {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('ustawienie PIN-u: wpisz, zatwierdź, powtórz → zapisane i ekran zamknięty', (t) async {
-    await LockService.I.disable();
+  testWidgets('ustawienie PIN-u: wpisz, ✓, powtórz → zapisane i ekran zamknięty', (t) async {
     bool? result;
     await t.pumpWidget(MaterialApp(
       home: Builder(
@@ -24,7 +23,7 @@ void main() {
             child: ElevatedButton(
               onPressed: () async {
                 result = await Navigator.push<bool>(
-                    context, MaterialPageRoute(builder: (_) => const SetSecretScreen(mode: LockMode.pin)));
+                    context, MaterialPageRoute(builder: (_) => const LockSetupScreen(method: LockMethod.pin)));
               },
               child: const Text('start'),
             ),
@@ -34,29 +33,28 @@ void main() {
     ));
     await t.tap(find.text('start'));
     await t.pumpAndSettle();
-    expect(find.text('Wpisz nowy PIN'), findsOneWidget);
-
-    await tapDigits(t, '2580'); // bez zatwierdzania
-    await t.pump(const Duration(milliseconds: 300));
-    await t.pumpAndSettle();
-    expect(find.text('Wpisz PIN jeszcze raz'), findsOneWidget);
 
     await tapDigits(t, '2580');
-    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.byIcon(Icons.check));
+    await t.pumpAndSettle();
+    expect(find.text('Powtórz PIN'), findsOneWidget);
+
+    await tapDigits(t, '2580'); // drugi raz bez zatwierdzania
     await t.pumpAndSettle();
 
-    expect(LockService.I.mode, LockMode.pin);
     expect(result, isTrue);
-    expect(find.byType(SetSecretScreen), findsNothing);
+    expect(find.byType(LockSetupScreen), findsNothing);
+    expect((await Lock.load()).method, LockMethod.pin);
+    expect(await Lock.pinLength(), 4);
   });
 
-  testWidgets('odblokowanie PIN-em', (t) async {
-    await LockService.I.setSecret(LockMode.pin, '1357', 4);
+  testWidgets('odblokowanie PIN-em bez zatwierdzania', (t) async {
+    await Lock.setSecret(LockMethod.pin, '1357');
+    final c = await Lock.load();
     var unlocked = false;
-    await t.pumpWidget(MaterialApp(home: UnlockScreen(onUnlocked: () => unlocked = true)));
-    await t.pump();
+    await t.pumpWidget(MaterialApp(home: LockScreen(config: c, onUnlocked: () => unlocked = true)));
+    await t.pumpAndSettle();
     await tapDigits(t, '1357');
-    await t.pump(const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(unlocked, isTrue);
   });

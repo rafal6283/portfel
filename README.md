@@ -9,8 +9,10 @@ Prywatna aplikacja na Androida i iPhone'a (Flutter) do śledzenia zysków i stra
 - **Kursy na żywo**: średnie NBP (tabela A), cena złota NBP za 1 g, srebro ze spotu USD (gold-api.com) × kurs NBP. Odświeżanie przy starcie i przeciągnięciem w dół. Każdy kurs można ustawić ręcznie.
 - **Kurs NBP z dnia transakcji** podpowiadany w formularzu (przycisk „Użyj”).
 - **Lokaty**: trwające z odsetkami narosłymi do dziś (po 19% podatku), zakończone z wynikiem z wypłaty albo z odsetek i podatku, lokaty bez wyniku osobno.
+- **Gotówka**: złotówki i waluty (sejf, portfel, konto), wyceniane po kursie NBP.
+- **Nieruchomości**: cena zakupu z kosztami, szacowana wartość dziś albo sprzedaż, dochód z najmu – zysk/strata i wynik r/r.
 - **Kopia zapasowa** w pliku `.json` (import scala wpisy po id) – też do przeniesienia danych między telefonami.
-- **Blokada**: kod PIN (4–8 cyfr), wzór albo odcisk palca / twarz; biometria może uzupełniać PIN lub wzór. Czas blokady po wyjściu z aplikacji do wyboru, przerwa po 5 błędnych próbach, reset zapomnianego kodu blokadą ekranu telefonu, zasłonięty podgląd w ostatnich aplikacjach. Kod zapisany tylko jako skrót SHA-256 z solą.
+- **Logowanie** (jak w Teczce Zdrowia): PIN, wzór, blokada ekranu telefonu, opcjonalnie odcisk palca / twarz; PIN sprawdzany bez zatwierdzania, przerwa po 5 błędnych próbach, zapomniany kod – odblokowanie blokadą telefonu. Kod zapisany tylko jako solony skrót SHA-256.
 
 ## Instalacja
 
