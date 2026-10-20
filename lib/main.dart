@@ -120,9 +120,13 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
       if (c == null) const Positioned.fill(child: Scaffold(body: SizedBox())),
       if (c != null && locked)
         Positioned.fill(
-          child: Navigator(
-            onGenerateRoute: (_) => MaterialPageRoute(
-              builder: (_) => LockScreen(config: c, onUnlocked: () => setState(() => locked = false)),
+          // własny nawigator dla okien ekranu logowania; bez kontrolera animacji Hero,
+          // bo współdzielony z głównym nawigatorem psuł przejścia po odblokowaniu (czarny ekran)
+          child: HeroControllerScope.none(
+            child: Navigator(
+              onGenerateRoute: (_) => MaterialPageRoute(
+                builder: (_) => LockScreen(config: c, onUnlocked: () => setState(() => locked = false)),
+              ),
             ),
           ),
         ),
