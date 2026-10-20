@@ -28,7 +28,7 @@ void main() {
     await t.tap(find.byIcon(Icons.settings_outlined));
     await t.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
-    await t.pageBack();
+    await t.tap(find.byType(BackButton)); // pageBack szuka podpowiedzi „Back”, a aplikacja jest po polsku
     await t.pumpAndSettle();
 
     await t.tap(find.text('Transakcja'));
