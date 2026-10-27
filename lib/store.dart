@@ -152,6 +152,14 @@ class AppState extends ChangeNotifier {
     return s;
   }
 
+  /// Przywrócenie kopii: zastępuje wszystkie dane.
+  Future<ImportSummary> replaceFromBytes(List<int> bytes) async {
+    final s = _apply(jsonDecode(utf8.decode(bytes)), replace: true);
+    await _save();
+    notifyListeners();
+    return s;
+  }
+
   Uint8List exportBytes() => Uint8List.fromList(utf8.encode(const JsonEncoder.withIndent(' ').convert(toJson())));
 
   // ---------- kursy ----------

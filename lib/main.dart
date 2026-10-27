@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'package:koofr_backup_ui/koofr_backup_ui.dart';
+
+import 'koofr_backup.dart';
 import 'security/lock.dart';
 import 'store.dart';
 import 'ui/format.dart';
@@ -72,6 +75,8 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
 
   Future<void> _load() async {
     final results = await Future.wait([Lock.load(), app.load()]);
+    // kopia na Koofr w tle (po wczytaniu danych)
+    KoofrBackup.setup(PortfelBackup()).ignore();
     final c = results.first as LockConfig;
     if (!mounted) return;
     setState(() {
