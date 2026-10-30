@@ -12,6 +12,13 @@ import 'ui/lock_screen.dart';
 
 final AppState app = AppState();
 
+/// Kopia na Koofr w tle (Android) — także przy zamkniętej aplikacji.
+@pragma('vm:entry-point')
+void koofrCallback() => KoofrBackground.dispatch(() async {
+      await app.load();
+      return PortfelBackup();
+    });
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const PortfelApp());
@@ -76,7 +83,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   Future<void> _load() async {
     final results = await Future.wait([Lock.load(), app.load()]);
     // kopia na Koofr w tle (po wczytaniu danych)
-    KoofrBackup.setup(PortfelBackup()).ignore();
+    KoofrBackup.setup(PortfelBackup()).then((_) => KoofrBackground.start(koofrCallback)).ignore();
     final c = results.first as LockConfig;
     if (!mounted) return;
     setState(() {
