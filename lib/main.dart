@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:koofr_backup_ui/koofr_backup_ui.dart';
 
 import 'koofr_backup.dart';
+import 'notify.dart';
 import 'security/lock.dart';
 import 'store.dart';
 import 'ui/format.dart';
@@ -17,6 +18,8 @@ final AppState app = AppState();
 void koofrCallback() => KoofrBackground.dispatch(() async {
       await app.load();
       return PortfelBackup();
+    }, other: (name) async {
+      if (name == AppState.alertTask) await app.backgroundCheck();
     });
 
 void main() {
@@ -83,7 +86,8 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   Future<void> _load() async {
     final results = await Future.wait([Lock.load(), app.load()]);
     // kopia na Koofr w tle (po wczytaniu danych)
-    KoofrBackup.setup(PortfelBackup()).then((_) => KoofrBackground.start(koofrCallback)).ignore();
+    KoofrBackup.setup(PortfelBackup()).then((_) => KoofrBackground.start(koofrCallback)).then((_) => app.syncAlertTask()).ignore();
+    Notify.scheduleDeposits(app.deposits).ignore();
     final c = results.first as LockConfig;
     if (!mounted) return;
     setState(() {

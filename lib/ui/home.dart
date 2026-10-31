@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../calc.dart';
 import '../main.dart';
 import '../models.dart';
+import 'alerts_screen.dart';
 import 'assets_tab.dart';
 import 'deposit_form.dart';
 import 'format.dart';
@@ -46,6 +47,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       tooltip: 'Odśwież kursy',
                       icon: const Icon(Icons.refresh),
                       onPressed: () => app.refreshRates(force: true)),
+              IconButton(
+                  tooltip: 'Alerty cenowe',
+                  icon: Icon(app.alerts.any((a) => a.active) ? Icons.notifications_active_outlined : Icons.notifications_none),
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AlertsScreen()))),
               IconButton(
                   tooltip: 'Ustawienia i kopia',
                   icon: const Icon(Icons.settings_outlined),

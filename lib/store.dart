@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:koofr_backup_ui/koofr_backup_ui.dart' show KoofrBackground;
 import 'package:path_provider/path_provider.dart';
+
+import 'alerts.dart';
+import 'notify.dart';
 
 import 'calc.dart';
 import 'models.dart';
@@ -15,6 +19,7 @@ class AppState extends ChangeNotifier {
   List<CashEntry> cash = [];
   List<Property> properties = [];
   Map<String, ManualRate> manual = {};
+  List<PriceAlert> alerts = [];
   RatesSnapshot rates = fallbackRates;
   bool loaded = false;
   bool refreshing = false;
@@ -51,6 +56,7 @@ class AppState extends ChangeNotifier {
         'cash': cash.map((c) => c.toJson()).toList(),
         'properties': properties.map((p) => p.toJson()).toList(),
         'manualRates': manual.map((k, v) => MapEntry(k, v.toJson())),
+        'alerts': alerts.map((a) => a.toJson()).toList(),
         'rates': rates.toJson(),
       };
 
@@ -88,6 +94,8 @@ class AppState extends ChangeNotifier {
       });
     }
     final snap = j['rates'] != null ? RatesSnapshot.fromJson(j['rates']) : null;
+    final rawAl = j['alerts'];
+    final newAlerts = <PriceAlert>[for (final e in (rawAl is List ? rawAl : const [])) if (e is Map) PriceAlert.fromJson(Map<String, dynamic>.from(e))];
 
     var added = 0, updated = 0;
     if (replace) {
@@ -96,6 +104,7 @@ class AppState extends ChangeNotifier {
       cash = newCash;
       properties = newProp;
       manual = newManual;
+      alerts = newAlerts;
       added = newTx.length + newDep.length + newCash.length + newProp.length;
     } else {
       final ti = {for (var i = 0; i < txs.length; i++) txs[i].id: i};
@@ -121,6 +130,7 @@ class AppState extends ChangeNotifier {
       added += _merge<CashEntry>(cash, newCash, (x) => x.id, () => updated++);
       added += _merge<Property>(properties, newProp, (x) => x.id, () => updated++);
       manual.addAll(newManual);
+      _merge<PriceAlert>(alerts, newAlerts, (x) => x.id, () {});
     }
     if (snap != null && snap.rates.isNotEmpty) {
       final cur = rates.asOf ?? '';
@@ -157,6 +167,8 @@ class AppState extends ChangeNotifier {
     final s = _apply(jsonDecode(utf8.decode(bytes)), replace: true);
     await _save();
     notifyListeners();
+    Notify.scheduleDeposits(deposits).ignore();
+    syncAlertTask().ignore();
     return s;
   }
 
@@ -199,7 +211,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       rates = await fetchLatestRates(rates);
+      final fired = fireAlerts(alerts, rateOf);
       await _save();
+      await Notify.alerts(fired);
+      if (fired.isNotEmpty) await syncAlertTask();
     } catch (e) {
       rateError = 'Nie udało się pobrać kursów. Sprawdź internet i spróbuj ponownie.';
       debugPrint('rates $e');
@@ -237,12 +252,14 @@ class AppState extends ChangeNotifier {
     }
     await _save();
     notifyListeners();
+    Notify.scheduleDeposits(deposits).ignore();
   }
 
   Future<void> deleteDeposit(String id) async {
     deposits.removeWhere((x) => x.id == id);
     await _save();
     notifyListeners();
+    Notify.scheduleDeposits(deposits).ignore();
   }
 
   Future<void> upsertCash(CashEntry c) async {
@@ -277,6 +294,45 @@ class AppState extends ChangeNotifier {
     properties.removeWhere((x) => x.id == id);
     await _save();
     notifyListeners();
+  }
+
+  // ---------- alerty cenowe ----------
+
+  static const alertTask = 'portfel-alerty';
+
+  Future<void> upsertAlert(PriceAlert a) async {
+    final i = alerts.indexWhere((x) => x.id == a.id);
+    if (i >= 0) {
+      alerts[i] = a;
+    } else {
+      alerts.add(a);
+    }
+    await _save();
+    notifyListeners();
+    await syncAlertTask();
+  }
+
+  Future<void> deleteAlert(String id) async {
+    alerts.removeWhere((x) => x.id == id);
+    await _save();
+    notifyListeners();
+    await syncAlertTask();
+  }
+
+  /// Sprawdzanie kursów w tle co 2 h (Android), tylko gdy są aktywne alerty.
+  Future<void> syncAlertTask() async {
+    if (alerts.any((a) => a.active)) {
+      await KoofrBackground.registerPeriodic(alertTask, const Duration(hours: 2));
+    } else {
+      await KoofrBackground.cancelPeriodic(alertTask);
+    }
+  }
+
+  /// Praca w tle: pobranie kursów i sprawdzenie alertów.
+  Future<void> backgroundCheck() async {
+    await load();
+    if (!alerts.any((a) => a.active)) return;
+    await refreshRates(force: true);
   }
 
   CashTotals get cashSummary => cashTotals(cash, rateOf);

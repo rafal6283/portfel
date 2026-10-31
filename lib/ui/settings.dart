@@ -6,8 +6,11 @@ import 'package:koofr_backup_ui/koofr_backup_ui.dart';
 
 import '../security/lock.dart';
 import '../main.dart';
+import '../notify.dart';
+import 'alerts_screen.dart';
 import 'format.dart';
 import 'security_screen.dart';
+import 'tax_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,6 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadLock();
+    _loadNotify();
   }
 
   Future<void> _export() async {
@@ -60,6 +64,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => lock = c);
   }
 
+  NotifySettings? _notify;
+
+  Future<void> _loadNotify() async {
+    final n = await NotifySettings.load();
+    if (mounted) setState(() => _notify = n);
+  }
+
+  Future<void> _setNotify(bool? on, int? days) async {
+    final n = _notify ?? NotifySettings();
+    if (on != null) n.deposits = on;
+    if (days != null) n.daysBefore = days;
+    await n.save();
+    setState(() => _notify = n);
+    if (n.deposits) await Notify.requestPermission();
+    final c = await Notify.scheduleDeposits(app.deposits);
+    if (mounted && n.deposits) toast(context, c == 0 ? 'Brak trwających lokat z datą końca' : 'Zaplanowano przypomnień: $c');
+  }
+
   String get _lockLabel => switch (lock?.method) {
         LockMethod.pin => 'PIN${lock!.biometric ? ' + biometria' : ''}',
         LockMethod.pattern => 'Wzór${lock!.biometric ? ' + biometria' : ''}',
@@ -87,6 +109,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: const Text('Zapisz kopię'),
           subtitle: Text('${app.txs.length} transakcji, ${app.deposits.length} lokat, ${app.cash.length} gotówki, ${app.properties.length} nieruchomości'),
           onTap: _export,
+        ),
+        const _Header('Przypomnienia i podatki'),
+        ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('Alerty cenowe'),
+          subtitle: Text(app.alerts.where((a) => a.active).isEmpty ? 'Powiadomienie, gdy kurs osiągnie ustawiony poziom' : 'Aktywne: ${app.alerts.where((a) => a.active).length}'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AlertsScreen())),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.event_available_outlined),
+          title: const Text('Przypomnienia o końcu lokat'),
+          subtitle: Text(_notify == null ? '' : '${_notify!.daysBefore} ${_notify!.daysBefore == 1 ? 'dzień' : 'dni'} przed końcem i w dniu zakończenia, o 9:00'),
+          value: _notify?.deposits ?? true,
+          onChanged: (v) => _setNotify(v, null),
+        ),
+        if (_notify?.deposits ?? false)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(56, 0, 16, 8),
+            child: Wrap(spacing: 8, children: [
+              for (final d in const [1, 3, 7, 14])
+                ChoiceChip(label: Text('$d dni'), selected: _notify!.daysBefore == d, onSelected: (_) => _setNotify(null, d)),
+            ]),
+          ),
+        ListTile(
+          leading: const Icon(Icons.request_quote_outlined),
+          title: const Text('Zestawienie roczne'),
+          subtitle: const Text('Wynik sprzedaży walut i kruszców (FIFO), zasada pół roku dla złota i srebra, odsetki z lokat'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TaxScreen())),
         ),
         const _Header('Prywatność'),
         ListTile(
