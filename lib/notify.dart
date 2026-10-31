@@ -85,8 +85,8 @@ class Notify {
       if (!s.deposits) return 0;
       final list = depositReminders(deposits, daysBefore: s.daysBefore).take(60).toList();
       for (var i = 0; i < list.length; i++) {
-        final (when, title, body) = list[i];
-        await _plugin.zonedSchedule(_depBase + i, title, body, tz.TZDateTime.from(when, tz.local), _depDetails,
+        final (at, title, body) = list[i];
+        await _plugin.zonedSchedule(_depBase + i, title, body, tz.TZDateTime.from(at, tz.local), _depDetails,
             androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle);
       }
       return list.length;
