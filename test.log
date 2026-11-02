@@ -1,0 +1,41 @@
+
+::group::✅ Passing tests
+✅ /home/runner/work/portfel/portfel/test/lock_ui_test.dart: ustawienie PIN-u: wpisz, ✓, powtórz → zapisane i ekran zamknięty
+✅ /home/runner/work/portfel/portfel/test/lock_ui_test.dart: odblokowanie PIN-em bez zatwierdzania
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: FIFO częściowa sprzedaż bierze najstarszą partię
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: FIFO prowizja zwiększa koszt i zmniejsza przychód
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: FIFO sprzedaż ponad stan jest oznaczona i nie daje zysku z nadwyżki
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: FIFO brak kursu = brak wartości
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Lokaty zakończona z wypłatą
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Lokaty zakończona z odsetkami i podatkiem
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Lokaty noAnn ukrywa % r/r
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Lokaty trwająca nalicza liniowo po podatku
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Lokaty trwająca bez oprocentowania: wartość = kapitał
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Lokaty nieznany wynik nie wlicza się
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: JSON: nieznane pola są zachowane
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Gotówka i nieruchomości gotówka w walucie po kursie, PLN 1:1, brak kursu nie wlicza się
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Gotówka i nieruchomości nieruchomość posiadana: wycena minus zakup z kosztami, plus najem
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Gotówka i nieruchomości bez wyceny wartość = koszt, wynik 0
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Gotówka i nieruchomości sprzedana: zysk zrealizowany, wartość 0
+✅ /home/runner/work/portfel/portfel/test/calc_test.dart: Gotówka i nieruchomości JSON gotówki i nieruchomości
+::endgroup::
+::group::⏭️ Skipped tests
+⏭️ /home/runner/work/portfel/portfel/test/screenshots_test.dart: zrzuty ekranów (skipped)
+::endgroup::
+::group::✅ /home/runner/work/portfel/portfel/test/app_flow_test.dart: po odblokowaniu PIN-em otwierają się ustawienia i formularz transakcji
+load error MissingPluginException(No implementation found for method getApplicationDocumentsDirectory on channel plugins.flutter.io/path_provider)
+rates HTTP 400 – https://api.nbp.pl/api/exchangerates/tables/A/last/2/?format=json
+Powiadomienia niedostępne: LateInitializationError: Field '_instance@1069271368' has not been initialized.
+::endgroup::
+::group::✅ Passing tests
+✅ /home/runner/work/portfel/portfel/test/tax_alerts_test.dart: pół roku od końca miesiąca zakupu
+✅ /home/runner/work/portfel/portfel/test/tax_alerts_test.dart: FIFO: waluty i kruszce w zestawieniu rocznym
+✅ /home/runner/work/portfel/portfel/test/tax_alerts_test.dart: alerty jednorazowe
+✅ /home/runner/work/portfel/portfel/test/tax_alerts_test.dart: przypomnienia o lokatach
+✅ /home/runner/work/portfel/portfel/test/tax_alerts_test.dart: inflacja: odczyt Eurostat i wynik realny
+✅ /home/runner/work/portfel/portfel/test/lock_test.dart: PIN: zapis skrótu, weryfikacja i blokada po błędnych próbach
+✅ /home/runner/work/portfel/portfel/test/lock_test.dart: Wzór i migracja ze starej blokady
+✅ /home/runner/work/portfel/portfel/test/lock_test.dart: Długość PIN-u zapamiętana do odblokowania bez zatwierdzania
+::endgroup::
+
+🎉 27 tests passed, 1 skipped.
