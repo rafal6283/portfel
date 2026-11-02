@@ -167,3 +167,166 @@ class AllocationCard extends StatelessWidget {
     );
   }
 }
+
+/// Wynik po inflacji: koszt zakupów przeliczony na dzisiejsze złote (HICP Polska, Eurostat).
+class InflationCard extends StatefulWidget {
+  const InflationCard({super.key});
+  @override
+  State<InflationCard> createState() => _InflationCardState();
+}
+
+class _InflationCardState extends State<InflationCard> {
+  PriceIndex? _ix;
+
+  @override
+  void initState() {
+    super.initState();
+    InflationStore.load(refresh: false).then((c) {
+      if (mounted && c.isNotEmpty) setState(() => _ix = c);
+      return InflationStore.load();
+    }).then((f) {
+      if (mounted) setState(() => _ix = f);
+    }).catchError((_) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ix = _ix;
+    if (ix == null || ix.isEmpty || app.txs.isEmpty) return const SizedBox.shrink();
+    final r = realResult(app.txs, app.rateOf, ix);
+    if (r == null || r.cost <= 0) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    Widget col(String label, double v, {bool big = false}) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label.toUpperCase(), style: TextStyle(fontSize: 10.5, letterSpacing: 0.8, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+            AnimatedNumber(
+              value: v,
+              format: (x) => '${x >= 0 ? '+' : ''}${_zl(x)}',
+              style: TextStyle(fontSize: big ? 19 : 16, fontWeight: FontWeight.w700, color: Palette.pl(context, v), fontFeatures: tabular),
+            ),
+          ]),
+        );
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Wynik po inflacji', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Row(children: [col('Nominalnie', r.nominal), col('Realnie', r.real, big: true)]),
+          const SizedBox(height: 8),
+          Text(
+            'Otwarte pozycje walut i kruszców. Koszt zakupów w dzisiejszych złotych: ${_zl(r.realCost)} '
+            '(inflacja od zakupów średnio ${plNum(r.inflationPct * 100, decimals: 1)}%). '
+            '${r.real >= 0 ? 'Oszczędności zachowały siłę nabywczą.' : 'Wartość nie nadąża za inflacją.'}',
+            style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          Text('Inflacja: HICP Polska (Eurostat), ostatni opublikowany miesiąc.', style: t.labelSmall?.copyWith(color: cs.outline)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Lokaty na osi czasu: od założenia do końca, z dzisiejszą datą; dotknięcie pokazuje szczegóły.
+class DepositTimeline extends StatefulWidget {
+  const DepositTimeline({super.key});
+  @override
+  State<DepositTimeline> createState() => _DepositTimelineState();
+}
+
+class _DepositTimelineState extends State<DepositTimeline> {
+  int? _sel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final list = [
+      for (final d in app.deposits)
+        if (d.status == 'open' && d.start != null && d.end != null) d
+    ]..sort((a, b) => a.end!.compareTo(b.end!));
+    if (list.isEmpty) return const SizedBox.shrink();
+    final now = DateTime.now();
+    final t0 = list.map((d) => DateTime.parse(d.start!)).reduce((a, b) => a.isBefore(b) ? a : b);
+    final t1 = list.map((d) => DateTime.parse(d.end!)).reduce((a, b) => a.isAfter(b) ? a : b);
+    final span = t1.difference(t0).inDays.clamp(1, 100000);
+    double frac(DateTime d) => (d.difference(t0).inDays / span).clamp(0.0, 1.0);
+    final next = list.firstWhere((d) => !DateTime.parse(d.end!).isBefore(DateTime(now.year, now.month, now.day)), orElse: () => list.first);
+    final days = DateTime.parse(next.end!).difference(DateTime(now.year, now.month, now.day)).inDays;
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      margin: const EdgeInsets.only(top: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Kalendarz lokat', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(days >= 0 ? 'Najbliższa kończy się ${days == 0 ? 'dziś' : 'za $days ${days == 1 ? 'dzień' : 'dni'}'} (${dateFmt(next.end)})' : 'Wszystkie trwające lokaty mają minioną datę końca',
+              style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          LayoutBuilder(builder: (context, c) {
+            final w = c.maxWidth;
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, p, _) => Stack(children: [
+                Column(children: [
+                  for (var i = 0; i < list.length; i++)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _sel = _sel == i ? null : i),
+                      child: SizedBox(
+                        height: 30,
+                        child: Stack(children: [
+                          Positioned(
+                            left: w * frac(DateTime.parse(list[i].start!)),
+                            width: (w * (frac(DateTime.parse(list[i].end!)) - frac(DateTime.parse(list[i].start!))) * p).clamp(4.0, w),
+                            top: 5,
+                            height: 20,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: (_sel == null || _sel == i ? cs.primary : cs.primary.withValues(alpha: 0.35)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              alignment: Alignment.centerLeft,
+                              child: Text(list[i].bank.isEmpty ? pln(list[i].principal) : list[i].bank,
+                                  maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(color: cs.onPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                ]),
+                if (!now.isBefore(t0) && !now.isAfter(t1))
+                  Positioned(left: w * frac(now), top: 0, bottom: 0, child: Container(width: 2, color: cs.tertiary)),
+              ]),
+            );
+          }),
+          Row(children: [
+            Text(dateFmt(todayIso(t0)), style: t.labelSmall),
+            const Spacer(),
+            Text('dziś', style: t.labelSmall?.copyWith(color: cs.tertiary)),
+            const Spacer(),
+            Text(dateFmt(todayIso(t1)), style: t.labelSmall),
+          ]),
+          if (_sel != null && _sel! < list.length) ...[
+            const SizedBox(height: 8),
+            Builder(builder: (_) {
+              final d = list[_sel!];
+              return Text(
+                '${d.bank.isEmpty ? 'Lokata' : d.bank}${d.ref.isEmpty ? '' : ' · ${d.ref}'}: ${pln(d.principal)}'
+                '${d.rate != null ? ' · ${plNum(d.rate!, decimals: 2)}%' : ''} · ${dateFmt(d.start)} – ${dateFmt(d.end)}',
+                style: t.bodyMedium,
+              );
+            }),
+          ],
+        ]),
+      ),
+    );
+  }
+}

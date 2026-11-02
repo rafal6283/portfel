@@ -102,3 +102,114 @@ class RateHistoryStore {
     return h;
   }
 }
+
+// ---------- inflacja (HICP Polska, Eurostat; miesięczny indeks 2015 = 100) ----------
+
+/// 'RRRR-MM' → indeks cen
+typedef PriceIndex = Map<String, double>;
+
+class InflationStore {
+  static const _url = 'https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_midx'
+      '?format=JSON&lang=PL&geo=PL&coicop=CP00&unit=I15&sinceTimePeriod=2010-01';
+
+  static Future<File> _file() async => File('${(await getApplicationDocumentsDirectory()).path}/inflacja.json');
+
+  static PriceIndex parse(String body) {
+    final j = jsonDecode(body) as Map;
+    final idx = ((j['dimension'] as Map)['time'] as Map)['category']['index'] as Map;
+    final vals = j['value'] as Map;
+    final out = <String, double>{};
+    idx.forEach((k, pos) {
+      final v = vals['$pos'];
+      if (v is num) {
+        final m = RegExp(r'(\d{4})-?M?(\d{2})').firstMatch('$k');
+        if (m != null) out['${m[1]}-${m[2]}'] = v.toDouble();
+      }
+    });
+    return out;
+  }
+
+  static Future<PriceIndex> load({bool refresh = true}) async {
+    final f = await _file();
+    PriceIndex cached = {};
+    DateTime? at;
+    if (await f.exists()) {
+      try {
+        cached = parse(await f.readAsString());
+        at = await f.lastModified();
+      } catch (_) {}
+    }
+    if (!refresh || (at != null && DateTime.now().difference(at).inDays < 7 && cached.isNotEmpty)) return cached;
+    try {
+      final r = await http.get(Uri.parse(_url)).timeout(const Duration(seconds: 20));
+      if (r.statusCode == 200) {
+        final body = utf8.decode(r.bodyBytes);
+        final p = parse(body);
+        if (p.isNotEmpty) {
+          await f.writeAsString(body);
+          return p;
+        }
+      }
+    } catch (_) {}
+    return cached;
+  }
+}
+
+/// Indeks dla miesiąca; gdy brak (np. bieżący miesiąc jeszcze nieopublikowany) – ostatni wcześniejszy.
+double? indexAt(PriceIndex ix, String yyyyMm) {
+  if (ix.isEmpty) return null;
+  final keys = ix.keys.toList()..sort();
+  String? best;
+  for (final k in keys) {
+    if (k.compareTo(yyyyMm) <= 0) best = k;
+  }
+  return best == null ? null : ix[best];
+}
+
+class RealResult {
+  final double value; // bieżąca wartość otwartych pozycji
+  final double cost; // koszt nominalny (FIFO)
+  final double realCost; // koszt w dzisiejszych złotych
+  const RealResult(this.value, this.cost, this.realCost);
+  double get nominal => value - cost;
+  double get real => value - realCost;
+  double get inflationPct => cost <= 0 ? 0 : realCost / cost - 1;
+}
+
+/// Wynik otwartych pozycji walut i kruszców po uwzględnieniu inflacji od miesiąca każdego zakupu.
+RealResult? realResult(List<Tx> txs, double? Function(String) rateOf, PriceIndex ix) {
+  final nowIx = indexAt(ix, todayIso().substring(0, 7));
+  if (nowIx == null) return null;
+  final lots = <String, List<(double, double, String)>>{}; // ilość, koszt jedn., data
+  for (final t in [...txs]..sort(compareTx)) {
+    if (t.qty <= 0) continue;
+    final l = lots.putIfAbsent(t.asset, () => []);
+    if (t.isBuy) {
+      l.add((t.qty, (t.total + t.fee) / t.qty, t.date));
+      continue;
+    }
+    var left = t.qty;
+    while (left > 1e-12 && l.isNotEmpty) {
+      final (q, u, d) = l.first;
+      final take = q < left ? q : left;
+      left -= take;
+      if (q - take <= 1e-12) {
+        l.removeAt(0);
+      } else {
+        l[0] = (q - take, u, d);
+      }
+    }
+  }
+  var value = 0.0, cost = 0.0, real = 0.0;
+  for (final e in lots.entries) {
+    final r = rateOf(e.key);
+    for (final (q, u, d) in e.value) {
+      final c = q * u;
+      cost += c;
+      final i0 = indexAt(ix, d.substring(0, 7));
+      real += i0 == null ? c : c * nowIx / i0;
+      if (r != null) value += q * r;
+    }
+  }
+  return RealResult(value, cost, real);
+}

@@ -122,6 +122,7 @@ class PortfolioTab extends StatelessWidget {
           const SizedBox(height: 12),
           const FadeSlideIn(index: 1, child: ValueHistoryCard()),
           const SizedBox(height: 8),
+          const FadeSlideIn(index: 2, child: InflationCard()),
           const FadeSlideIn(index: 2, child: AllocationCard()),
           const SizedBox(height: 16),
           const FadeSlideIn(index: 3, child: _RateBoard()),
@@ -396,13 +397,14 @@ class DepositsTab extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w700, color: Palette.pl(context, t.net))),
           ]),
         ),
+        const FadeSlideIn(index: 1, child: DepositTimeline()),
         const SizedBox(height: 8),
         if (list.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Text('Brak lokat. Dodaj trwającą lokatę z oprocentowaniem, a aplikacja doliczy odsetki narosłe do dziś (po 19% podatku).'),
           ),
-        for (final d in list) _DepositTile(d: d),
+        for (var i = 0; i < list.length; i++) FadeSlideIn(index: 2 + i, child: _DepositTile(d: list[i])),
       ],
     );
   }

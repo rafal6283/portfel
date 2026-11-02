@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portfel/alerts.dart';
 import 'package:portfel/models.dart';
+import 'package:portfel/history.dart';
 import 'package:portfel/tax.dart';
 
 Tx tx(String date, String side, String asset, double qty, double total, {double fee = 0}) =>
@@ -60,5 +61,16 @@ void main() {
     expect(r.length, 2);
     expect(r.first.$1, DateTime(2026, 12, 7, 9));
     expect(r.last.$1, DateTime(2026, 12, 10, 9));
+  });
+
+  test('inflacja: odczyt Eurostat i wynik realny', () {
+    final ix = InflationStore.parse('{"value":{"0":100.0,"1":110.0},"dimension":{"time":{"category":{"index":{"2024-01":0,"2026-10":1}}}}}');
+    expect(ix, {'2024-01': 100.0, '2026-10': 110.0});
+    expect(indexAt(ix, '2025-06'), 100.0);
+    final r = realResult([tx('2024-01-15', 'buy', 'USD', 100, 400)], (c) => 4.2, ix)!;
+    expect(r.cost, closeTo(400, 1e-9));
+    expect(r.realCost, closeTo(440, 1e-9));
+    expect(r.nominal, closeTo(20, 1e-9));
+    expect(r.real, closeTo(-20, 1e-9));
   });
 }

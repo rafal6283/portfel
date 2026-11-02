@@ -7,6 +7,7 @@ import 'package:koofr_backup_ui/koofr_backup_ui.dart' show KoofrBackground;
 import 'package:path_provider/path_provider.dart';
 
 import 'alerts.dart';
+import 'home_widget.dart';
 import 'notify.dart';
 
 import 'calc.dart';
@@ -45,6 +46,7 @@ class AppState extends ChangeNotifier {
     }
     loaded = true;
     notifyListeners();
+    updateHomeWidget(this).ignore();
   }
 
   Map<String, dynamic> toJson() => {
@@ -61,6 +63,7 @@ class AppState extends ChangeNotifier {
       };
 
   Future<void> _save() async {
+    updateHomeWidget(this).ignore();
     final f = await _dataFile();
     final tmp = File('${f.path}.tmp');
     await tmp.writeAsString(jsonEncode(toJson()), flush: true);
