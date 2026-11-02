@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:rodzina_wykresy/rodzina_wykresy.dart';
 
 import '../calc.dart';
 import '../main.dart';
 import '../models.dart';
 import 'alerts_screen.dart';
 import 'assets_tab.dart';
+import 'portfolio_charts.dart';
 import 'deposit_form.dart';
 import 'format.dart';
 import 'settings.dart';
@@ -116,9 +118,13 @@ class PortfolioTab extends StatelessWidget {
                 ),
               ),
             ),
-          _Summary(p: p, d: d, c: c, re: re),
+          FadeSlideIn(index: 0, child: _Summary(p: p, d: d, c: c, re: re)),
+          const SizedBox(height: 12),
+          const FadeSlideIn(index: 1, child: ValueHistoryCard()),
+          const SizedBox(height: 8),
+          const FadeSlideIn(index: 2, child: AllocationCard()),
           const SizedBox(height: 16),
-          const _RateBoard(),
+          const FadeSlideIn(index: 3, child: _RateBoard()),
           const SizedBox(height: 20),
           Text('Pozycje', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
@@ -127,7 +133,7 @@ class PortfolioTab extends StatelessWidget {
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Text('Brak transakcji. Dodaj pierwsze kupno przyciskiem „Transakcja” albo zaimportuj kopię w Ustawieniach.'),
             ),
-          for (final r in p.rows) _PositionTile(r: r, onTap: () => onPick(r.code)),
+          for (var i = 0; i < p.rows.length; i++) FadeSlideIn(index: 4 + i, child: _PositionTile(r: p.rows[i], onTap: () => onPick(p.rows[i].code))),
         ],
       ),
     );
@@ -145,7 +151,7 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = p.unrealized + p.realized + d.net + re.net;
     final cs = Theme.of(context).colorScheme;
-    Widget tile(String label, String value, {Color? color, String? sub}) => Container(
+    Widget tile(String label, String value, {Color? color, String? sub, double? number, String Function(double)? fmt}) => Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(10)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -155,14 +161,18 @@ class _Summary extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(value,
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color, fontFeatures: tabular)),
+              child: number != null && fmt != null
+                  ? AnimatedNumber(
+                      value: number,
+                      format: fmt,
+                      style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color, fontFeatures: tabular))
+                  : Text(value, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color, fontFeatures: tabular)),
             ),
             if (sub != null) Text(sub, style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
           ]),
         );
     return Column(children: [
-      tile('Wartość dziś', pln(p.value + d.value + c.value + re.value),
+      tile('Wartość dziś', pln(p.value + d.value + c.value + re.value), number: p.value + d.value + c.value + re.value, fmt: pln,
           sub: [
             'waluty i kruszce ${pln(p.value)}',
             if (d.value > 0) 'lokaty ${pln(d.value)}',
@@ -187,7 +197,9 @@ class _Summary extends StatelessWidget {
       ]),
       const SizedBox(height: 8),
       Row(children: [
-        Expanded(child: tile('Wynik łącznie', signedPln(total), color: Palette.pl(context, total), sub: 'waluty, kruszce, lokaty, nieruchomości')),
+        Expanded(
+            child: tile('Wynik łącznie', signedPln(total),
+                number: total, fmt: signedPln, color: Palette.pl(context, total), sub: 'waluty, kruszce, lokaty, nieruchomości')),
       ]),
     ]);
   }
