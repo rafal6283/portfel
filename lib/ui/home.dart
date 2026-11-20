@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:rodzina_wykresy/rodzina_wykresy.dart';
 
+import '../bonds.dart';
 import '../calc.dart';
 import '../main.dart';
 import '../models.dart';
@@ -101,6 +102,7 @@ class PortfolioTab extends StatelessWidget {
     final d = app.depositSummary;
     final c = app.cashSummary;
     final re = app.propertySummary;
+    final bo = app.bondSummary;
     return RefreshIndicator(
       onRefresh: () => app.refreshRates(force: true),
       child: ListView(
@@ -118,7 +120,7 @@ class PortfolioTab extends StatelessWidget {
                 ),
               ),
             ),
-          FadeSlideIn(index: 0, child: _Summary(p: p, d: d, c: c, re: re)),
+          FadeSlideIn(index: 0, child: _Summary(p: p, d: d, c: c, re: re, bo: bo)),
           const SizedBox(height: 12),
           const FadeSlideIn(index: 1, child: ValueHistoryCard()),
           const SizedBox(height: 8),
@@ -146,11 +148,12 @@ class _Summary extends StatelessWidget {
   final DepositTotals d;
   final CashTotals c;
   final PropertyTotals re;
-  const _Summary({required this.p, required this.d, required this.c, required this.re});
+  final BondTotals bo;
+  const _Summary({required this.p, required this.d, required this.c, required this.re, required this.bo});
 
   @override
   Widget build(BuildContext context) {
-    final total = p.unrealized + p.realized + d.net + re.net;
+    final total = p.unrealized + p.realized + d.net + re.net + bo.net;
     final cs = Theme.of(context).colorScheme;
     Widget tile(String label, String value, {Color? color, String? sub, double? number, String Function(double)? fmt}) => Container(
           padding: const EdgeInsets.all(12),
@@ -173,12 +176,14 @@ class _Summary extends StatelessWidget {
           ]),
         );
     return Column(children: [
-      tile('Wartość dziś', pln(p.value + d.value + c.value + re.value), number: p.value + d.value + c.value + re.value, fmt: pln,
+      tile('Wartość dziś', pln(p.value + d.value + c.value + re.value + bo.value),
+          number: p.value + d.value + c.value + re.value + bo.value, fmt: pln,
           sub: [
             'waluty i kruszce ${pln(p.value)}',
             if (d.value > 0) 'lokaty ${pln(d.value)}',
             if (c.value > 0) 'gotówka ${pln(c.value)}',
             if (re.value > 0) 'nieruchomości ${pln(re.value)}',
+            if (bo.value > 0) 'obligacje ${pln(bo.value)}',
           ].join(' · ')),
       const SizedBox(height: 8),
       Row(children: [

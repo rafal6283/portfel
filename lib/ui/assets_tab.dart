@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../calc.dart';
 import '../main.dart';
 import '../models.dart';
+import '../bonds.dart';
+import 'bond_form.dart';
 import 'cash_form.dart';
 import 'format.dart';
 import 'property_form.dart';
@@ -20,6 +22,12 @@ Future<void> addAssetSheet(BuildContext context) async {
           onTap: () => Navigator.pop(c, 'cash'),
         ),
         ListTile(
+          leading: const Icon(Icons.account_balance_outlined),
+          title: const Text('Obligacje skarbowe'),
+          subtitle: const Text('EDO, COI, ROD, ROS, TOS, DOR, ROR, OTS'),
+          onTap: () => Navigator.pop(c, 'bond'),
+        ),
+        ListTile(
           leading: const Icon(Icons.home_work_outlined),
           title: const Text('Nieruchomość'),
           subtitle: const Text('Mieszkanie, dom, działka, garaż'),
@@ -31,7 +39,8 @@ Future<void> addAssetSheet(BuildContext context) async {
   if (!context.mounted || pick == null) return;
   Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => pick == 'cash' ? const CashForm() : const PropertyForm()),
+    MaterialPageRoute(
+        builder: (_) => switch (pick) { 'cash' => const CashForm(), 'bond' => const BondForm(), _ => const PropertyForm() }),
   );
 }
 
@@ -43,6 +52,12 @@ class AssetsTab extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final ct = app.cashSummary;
     final pt = app.propertySummary;
+    final bt = app.bondSummary;
+    final bonds = [...app.bonds]
+      ..sort((a, b) {
+        if ((a.redeemed == null) != (b.redeemed == null)) return a.redeemed == null ? -1 : 1;
+        return b.date.compareTo(a.date);
+      });
     final small = TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant);
     final cash = [...app.cash]..sort((a, b) => (cashValue(b, app.rateOf) ?? 0).compareTo(cashValue(a, app.rateOf) ?? 0));
     final props = [...app.properties]
@@ -93,6 +108,18 @@ class AssetsTab extends StatelessWidget {
               ]),
             ),
           ),
+        const SizedBox(height: 12),
+        header('Obligacje skarbowe', pln(bt.value)),
+        if (bt.open > 0)
+          Text('Wynik netto: ${signedPln(bt.net)} (przy wykupie dziś, po opłatach i podatku)${bt.estimated ? ' · część stóp szacowana' : ''}',
+              style: small.copyWith(color: Palette.pl(context, bt.net))),
+        if (app.bonds.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('Brak obligacji. Dodaj serię (np. EDO1136), datę zakupu, liczbę sztuk i oprocentowanie — '
+                'aplikacja policzy wartość, opłatę za wcześniejszy wykup i podatek.'),
+          ),
+        for (final b in bonds) _BondTile(b: b, line: line()),
         const SizedBox(height: 12),
         header('Nieruchomości', pln(pt.value)),
         if (props.isNotEmpty)
@@ -150,6 +177,48 @@ class _PropertyTile extends StatelessWidget {
             Text(p.sold ? 'sprzedana' : pln(c.value), style: const TextStyle(fontWeight: FontWeight.w700, fontFeatures: tabular)),
             Text(signedPln(c.net), style: TextStyle(color: Palette.pl(context, c.net), fontFeatures: tabular)),
             if (c.annual != null) Text('${pct(c.annual!, signed: true)} r/r', style: small.copyWith(fontSize: 11.5)),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+class _BondTile extends StatelessWidget {
+  final Bond b;
+  final BoxDecoration line;
+  const _BondTile({required this.b, required this.line});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = bondCalc(b, inflationYoY: app.inflationYoY);
+    final small = TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant);
+    final done = b.redeemed != null;
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BondForm(existing: b))),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: line,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                if (done) Pill('wykupione', cs.onSurfaceVariant),
+                Text('${b.series} · ${b.count} szt.', style: const TextStyle(fontWeight: FontWeight.w700)),
+              ]),
+              Text(
+                  done
+                      ? 'zakup ${dateFmt(b.date)} · wykup ${dateFmt(b.redeemed)}'
+                      : 'rok ${c.period}: ${n2(c.currentRate)}%${c.estimated ? ' (szacunek)' : ''} · termin ${dateFmt(c.maturity)}',
+                  style: small),
+              if (b.note.isNotEmpty) Text(b.note, style: small),
+            ]),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(pln(done ? c.netIfRedeemed + c.paidOut : c.netIfRedeemed),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
+            Text(signedPln(c.net), style: small.copyWith(color: Palette.pl(context, c.net))),
           ]),
         ]),
       ),

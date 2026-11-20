@@ -10,13 +10,16 @@ import 'alerts.dart';
 import 'home_widget.dart';
 import 'notify.dart';
 
+import 'bonds.dart';
 import 'calc.dart';
+import 'history.dart' show PriceIndex, InflationStore;
 import 'models.dart';
 import 'rates.dart';
 
 class AppState extends ChangeNotifier {
   List<Tx> txs = [];
   List<Deposit> deposits = [];
+  List<Bond> bonds = [];
   List<CashEntry> cash = [];
   List<Property> properties = [];
   Map<String, ManualRate> manual = {};
@@ -47,6 +50,17 @@ class AppState extends ChangeNotifier {
     loaded = true;
     notifyListeners();
     updateHomeWidget(this).ignore();
+    if (bonds.isNotEmpty) _loadInflation().ignore();
+  }
+
+  /// Inflacja do szacowania stóp obligacji indeksowanych (najpierw z pamięci, potem z sieci).
+  Future<void> _loadInflation() async {
+    try {
+      inflationIndex = await InflationStore.load(refresh: false);
+      notifyListeners();
+      inflationIndex = await InflationStore.load();
+      notifyListeners();
+    } catch (_) {}
   }
 
   Map<String, dynamic> toJson() => {
@@ -55,6 +69,7 @@ class AppState extends ChangeNotifier {
         'exportedAt': DateTime.now().toUtc().toIso8601String(),
         'transactions': txs.map((t) => t.toJson()).toList(),
         'deposits': deposits.map((d) => d.toJson()).toList(),
+        'bonds': bonds.map((b) => b.toJson()).toList(),
         'cash': cash.map((c) => c.toJson()).toList(),
         'properties': properties.map((p) => p.toJson()).toList(),
         'manualRates': manual.map((k, v) => MapEntry(k, v.toJson())),
@@ -77,11 +92,15 @@ class AppState extends ChangeNotifier {
     final rawDep = j['deposits'];
     final rawCash = j['cash'];
     final rawProp = j['properties'];
-    if (rawTx is! List && rawDep is! List && rawCash is! List && rawProp is! List) {
+    final rawBonds = j['bonds'];
+    if (rawTx is! List && rawDep is! List && rawCash is! List && rawProp is! List && rawBonds is! List) {
       throw const FormatException('W pliku nie ma danych Portfela');
     }
     final newCash = <CashEntry>[for (final e in (rawCash is List ? rawCash : const [])) if (e is Map) CashEntry.fromJson(Map<String, dynamic>.from(e))];
     final newProp = <Property>[for (final e in (rawProp is List ? rawProp : const [])) if (e is Map) Property.fromJson(Map<String, dynamic>.from(e))];
+    final newBonds = <Bond>[for (final e in (rawBonds is List ? rawBonds : const [])) if (e is Map) Bond.fromJson(Map<String, dynamic>.from(e))]
+        .where((b) => b.count > 0 && b.type != null)
+        .toList();
     final newTx = <Tx>[for (final e in (rawTx is List ? rawTx : const [])) if (e is Map) Tx.fromJson(Map<String, dynamic>.from(e))]
         .where((t) => t.qty > 0 && t.total >= 0 && t.date.length == 10)
         .toList();
@@ -106,9 +125,10 @@ class AppState extends ChangeNotifier {
       deposits = newDep;
       cash = newCash;
       properties = newProp;
+      bonds = newBonds;
       manual = newManual;
       alerts = newAlerts;
-      added = newTx.length + newDep.length + newCash.length + newProp.length;
+      added = newTx.length + newDep.length + newCash.length + newProp.length + newBonds.length;
     } else {
       final ti = {for (var i = 0; i < txs.length; i++) txs[i].id: i};
       for (final t in newTx) {
@@ -132,6 +152,7 @@ class AppState extends ChangeNotifier {
       }
       added += _merge<CashEntry>(cash, newCash, (x) => x.id, () => updated++);
       added += _merge<Property>(properties, newProp, (x) => x.id, () => updated++);
+      added += _merge<Bond>(bonds, newBonds, (x) => x.id, () => updated++);
       manual.addAll(newManual);
       _merge<PriceAlert>(alerts, newAlerts, (x) => x.id, () {});
     }
@@ -281,6 +302,36 @@ class AppState extends ChangeNotifier {
     await _save();
     notifyListeners();
   }
+
+  Future<void> upsertBond(Bond b) async {
+    if (bonds.isEmpty) _loadInflation().ignore();
+    final i = bonds.indexWhere((x) => x.id == b.id);
+    if (i >= 0) {
+      bonds[i] = b;
+    } else {
+      bonds.add(b);
+    }
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> deleteBond(String id) async {
+    bonds.removeWhere((x) => x.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  /// Inflacja r/r (%) dla miesiąca „rrrr-mm” z indeksu HICP (Eurostat) — szacunek stopy obligacji indeksowanych,
+  /// gdy nie wpisano jej z wyciągu; GUS (CPI) różni się zwykle o kilka dziesiątych punktu.
+  PriceIndex inflationIndex = {};
+  double? inflationYoY(String yyyyMm) {
+    final a = inflationIndex[yyyyMm];
+    final y = int.parse(yyyyMm.substring(0, 4)), m = yyyyMm.substring(5);
+    final b = inflationIndex['${y - 1}-$m'];
+    return a == null || b == null || b == 0 ? null : (a / b - 1) * 100;
+  }
+
+  BondTotals get bondSummary => bondTotals(bonds, inflationYoY: inflationYoY);
 
   Future<void> upsertProperty(Property p) async {
     final i = properties.indexWhere((x) => x.id == p.id);

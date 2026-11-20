@@ -40,7 +40,7 @@ class _PortfelExchange extends ExchangeAdapter {
   Future<Map<String, List<int>?>> export() async {
     final hist = await RateHistoryStore.load();
     final now = DateTime.now();
-    final other = app.depositSummary.value + app.cashSummary.value + app.propertySummary.value;
+    final other = app.depositSummary.value + app.cashSummary.value + app.propertySummary.value + app.bondSummary.value;
     final series = valueSeries(app.txs, hist, now.subtract(const Duration(days: 90)), now, app.rateOf);
     return {'czynniki-portfel': portfelFactors(series, other, now)};
   }
