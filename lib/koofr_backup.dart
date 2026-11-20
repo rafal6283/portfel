@@ -42,17 +42,23 @@ class _PortfelExchange extends ExchangeAdapter {
     final now = DateTime.now();
     final other = app.depositSummary.value + app.cashSummary.value + app.propertySummary.value;
     final series = valueSeries(app.txs, hist, now.subtract(const Duration(days: 90)), now, app.rateOf);
-    return {
-      'czynniki-portfel': utf8.encode(jsonEncode({
-        'format': 'czynniki-dnia',
-        'version': 1,
-        'source': 'portfel',
-        'exported_at': now.millisecondsSinceEpoch,
-        'days': [
-          for (final p in series) {'date': todayIso(p.day), 'value': (p.value + other).round()},
-          if (series.isEmpty && other > 0) {'date': todayIso(now), 'value': other.round()},
-        ],
-      })),
-    };
+    return {'czynniki-portfel': portfelFactors(series, other, now)};
   }
+}
+
+/// Plik „czynniki-portfel” (czynniki-dnia v1, kontrakt w WYMIANA.md Rytmu Snu): jedna wartość na dzień.
+List<int> portfelFactors(List<ValuePoint> series, double other, DateTime now) {
+  final byDay = <String, int>{}; // przy kilku punktach z jednego dnia liczy się ostatni
+  for (final p in series) {
+    byDay[todayIso(p.day)] = (p.value + other).round();
+  }
+  if (byDay.isEmpty && other > 0) byDay[todayIso(now)] = other.round();
+  final keys = byDay.keys.toList()..sort();
+  return utf8.encode(jsonEncode({
+    'format': 'czynniki-dnia',
+    'version': 1,
+    'source': 'portfel',
+    'exported_at': now.millisecondsSinceEpoch,
+    'days': [for (final k in keys) {'date': k, 'value': byDay[k]}],
+  }));
 }
