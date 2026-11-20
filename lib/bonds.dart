@@ -134,7 +134,8 @@ DateTime? _date(String s) {
 String _iso(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 DateTime _addMonths(DateTime d, int m) {
-  final y = d.year + (d.month - 1 + m) ~/ 12, mo = (d.month - 1 + m) % 12 + 1;
+  final total = d.year * 12 + d.month - 1 + m; // także dla m < 0 (~/ obcina w stronę zera)
+  final y = total ~/ 12, mo = total % 12 + 1;
   return DateTime.utc(y, mo, min(d.day, DateTime.utc(y, mo + 1, 0).day));
 }
 
