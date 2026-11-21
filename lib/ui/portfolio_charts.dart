@@ -330,3 +330,120 @@ class _DepositTimelineState extends State<DepositTimeline> {
     );
   }
 }
+
+/// „Co jeśli?”: suwakami zmieniasz kurs kruszców i walut, a wartość i wynik portfela przeliczają się na żywo.
+class ScenarioCard extends StatefulWidget {
+  const ScenarioCard({super.key});
+  @override
+  State<ScenarioCard> createState() => _ScenarioCardState();
+}
+
+class _ScenarioCardState extends State<ScenarioCard> {
+  double _metal = 0, _fx = 0; // zmiana kursu w %
+
+  static bool _isMetal(String code) => code == 'XAU' || code == 'XAG' || code == 'XPT' || code == 'XPD';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final rows = [for (final r in app.portfolio.rows) if ((r.value ?? 0) > 0) r];
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final hasMetal = rows.any((r) => _isMetal(r.code));
+    final hasFx = rows.any((r) => !_isMetal(r.code));
+    double pct(String code) => (_isMetal(code) ? _metal : _fx) / 100;
+    final now = rows.fold<double>(0, (a, r) => a + r.value!);
+    final cost = rows.fold<double>(0, (a, r) => a + r.cost);
+    final after = rows.fold<double>(0, (a, r) => a + r.value! * (1 + pct(r.code)));
+    final bars = [
+      for (final r in rows)
+        BarItem(r.code, r.value! * pct(r.code),
+            detail: '${assetOf(r.code).name}: ${_zl(r.value!)} → ${_zl(r.value! * (1 + pct(r.code)))}'),
+    ];
+    Widget slider(String label, double v, ValueChanged<double> on) => Row(children: [
+          SizedBox(width: 74, child: Text(label, style: t.bodyMedium)),
+          Expanded(
+            child: Slider(
+              value: v,
+              min: -30,
+              max: 30,
+              divisions: 60,
+              label: '${v >= 0 ? '+' : ''}${v.round()}%',
+              onChanged: on,
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text('${v >= 0 ? '+' : ''}${v.round()}%',
+                textAlign: TextAlign.right, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: Palette.pl(context, v))),
+          ),
+        ]);
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text('Co jeśli kursy się zmienią?', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+            if (_metal != 0 || _fx != 0)
+              TextButton(onPressed: () => setState(() => _metal = _fx = 0), child: const Text('Wyzeruj')),
+          ]),
+          Text('Przesuń suwaki – wartość i wynik walut i kruszców przeliczą się od razu.',
+              style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 6),
+          if (hasMetal) slider('Kruszce', _metal, (v) => setState(() => _metal = v)),
+          if (hasFx) slider('Waluty', _fx, (v) => setState(() => _fx = v)),
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('WARTOŚĆ', style: TextStyle(fontSize: 10.5, letterSpacing: 0.8, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                AnimatedNumber(value: after, format: _zl, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, fontFeatures: tabular)),
+              ]),
+            ),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('ZMIANA', style: TextStyle(fontSize: 10.5, letterSpacing: 0.8, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                AnimatedNumber(
+                  value: after - now,
+                  format: (x) => '${x >= 0 ? '+' : ''}${_zl(x)}',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Palette.pl(context, after - now), fontFeatures: tabular),
+                ),
+              ]),
+            ),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('WYNIK', style: TextStyle(fontSize: 10.5, letterSpacing: 0.8, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                AnimatedNumber(
+                  value: after - cost,
+                  format: (x) => '${x >= 0 ? '+' : ''}${_zl(x)}',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Palette.pl(context, after - cost), fontFeatures: tabular),
+                ),
+              ]),
+            ),
+          ]),
+          if ((_metal != 0 || _fx != 0) && rows.length > 1) ...[
+            const SizedBox(height: 10),
+            InteractiveBarChart(
+              bars: bars,
+              horizontal: true,
+              format: (v) => '${v >= 0 ? '+' : ''}${_zl(v)}',
+              color: Palette.gain(context),
+              negativeColor: Palette.loss(context),
+            ),
+          ],
+          // próg rentowności: o ile mogą spaść kursy, zanim całość zejdzie poniżej kosztu
+          if (now > cost && cost > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Bufor: kursy mogą spaść średnio o ${plNum(100 * (1 - cost / now), decimals: 1)}%, zanim całość będzie poniżej kosztu zakupu.',
+                style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}

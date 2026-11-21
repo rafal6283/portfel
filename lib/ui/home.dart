@@ -126,6 +126,7 @@ class PortfolioTab extends StatelessWidget {
           const SizedBox(height: 8),
           const FadeSlideIn(index: 2, child: InflationCard()),
           const FadeSlideIn(index: 2, child: AllocationCard()),
+          const FadeSlideIn(index: 3, child: ScenarioCard()),
           const SizedBox(height: 16),
           const FadeSlideIn(index: 3, child: _RateBoard()),
           const SizedBox(height: 20),
